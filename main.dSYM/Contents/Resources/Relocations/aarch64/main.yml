@@ -1,0 +1,5 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/breznev/Documents/Coding Assignments/OOP_Class/main'
+relocations:     []
+...
