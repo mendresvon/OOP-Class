@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 
+// data types, variables, input/output
 int main() {
     std::string name;
     int age;
