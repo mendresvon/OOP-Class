@@ -1,0 +1,23 @@
+// Week 3 Topics: Strings, String Methods, Functions
+
+Strings
+- std::string is the C++ string object (not the same as a C-style char array)
+- You can build strings with +, append(), and +=
+- Raw strings R"(...)" let you skip escape sequences entirely
+
+String Methods
+- size() / length()  -> how many characters are in the string
+- capacity()         -> how much memory is reserved (usually more than size)
+- empty()            -> returns true if the string has nothing in it
+- at(i) / [i]        -> get a character at index i. at() is safer (throws on bad index)
+- front() / back()   -> first and last character
+- substr(pos, len)   -> cut out a piece of the string
+- find(str, start)   -> search for something, returns npos if not found
+- insert(pos, str)   -> jam something in at a position
+- erase(begin, end)  -> delete a range of characters
+- clear()            -> wipe the whole string
+
+String <-> Number Conversions
+- stoi(str)          -> string to int
+- stod(str)          -> string to double
+- to_string(num)     -> int or double back to a string

@@ -1,16 +1,22 @@
 #include <iostream>
 #include <string>
 
-// data types, variables, input/output
-int main() {
-    std::string name;
-    int age;
-    std::cout << "Enter your name: ";
-    std::cin >> name;
-    std::cout << "Enter your age: ";
-    std::cin >> age;
+using namespace std;
 
-    std::cout << "Hello, " << name << "!" << std::endl;
-    std::cout << "You are " << age << " years old." << std::endl;
+// Week 2 - basics: reading user input and printing output
+int main() {
+    string name;
+    int age;
+
+    // Ask the user for some info
+    cout << "Enter your name: ";
+    cin >> name;
+    cout << "Enter your age: ";
+    cin >> age;
+
+    // Print it back
+    cout << "Hello, " << name << "!" << endl;
+    cout << "You are " << age << " years old." << endl;
+
     return 0;
 }
