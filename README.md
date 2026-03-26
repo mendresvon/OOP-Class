@@ -25,22 +25,16 @@
 
 ```
 OOP-Class/
-├── week5/
-│   ├── main.cpp          # Grade converter with functions
-│   ├── topics.txt        # Raw weekly topics
-│   └── week5_notes.md   # Structured notes (EN)
-├── prime.cpp             # Prime number checker
+├── week1/               # Week 1 exercises & notes
+├── week2/               # Week 2 exercises & notes
+├── week3/               # Week 3 exercises & notes
+├── week4/               # Week 4 exercises & notes
+├── week5/               # Week 5 exercises & notes
+├── playground/          # Scratch files & experiments
+├── prime.cpp            # Prime number checker
 ├── .gitignore
 └── README.md
 ```
-
----
-
-## 📚 Weekly Notes
-
-| Week | Topics |
-|---|---|
-| **Week 5** | Functions, DRY, ODR, `constexpr`, Name Mangling, Overloading |
 
 ---
 
