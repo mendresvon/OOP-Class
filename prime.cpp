@@ -1,0 +1,1 @@
+// write a c++ program using functions to check if a number is prime
