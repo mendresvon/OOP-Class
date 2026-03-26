@@ -1,0 +1,5 @@
+functions
+DRY (don't repeat yourself)
+ODR (one definition rule)
+constexpr
+name mangling
