@@ -3,18 +3,9 @@
 #include <iostream>
 using namespace std;
 
-// Returns true if n is a prime number, false otherwise
-bool isPrime(int n) {
-    if (n < 2) return false;       // 0 and 1 are not prime
-    if (n == 2) return true;       // 2 is the only even prime
-    if (n % 2 == 0) return false;  // eliminate all other even numbers
-
-    // Only check odd divisors up to sqrt(n)
-    for (int i = 3; i * i <= n; i += 2) {
-        if (n % i == 0) return false;
-    }
-    return true;
-}
+// Forward declaration (prototype) — tells the compiler isPrime exists
+// before main sees it. The actual definition comes after main.
+bool isPrime(int n);
 
 int main() {
     int number;
@@ -29,4 +20,17 @@ int main() {
     }
 
     return 0;
+}
+
+// Definition of isPrime
+bool isPrime(int n) {
+    if (n < 2) return false;       // 0 and 1 are not prime
+    if (n == 2) return true;       // 2 is the only even prime
+    if (n % 2 == 0) return false;  // eliminate all other even numbers
+
+    // Only check odd divisors up to sqrt(n)
+    for (int i = 3; i * i <= n; i += 2) {
+        if (n % i == 0) return false;
+    }
+    return true;
 }
