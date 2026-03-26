@@ -1,0 +1,14 @@
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Binaries and compiled files
+*.main
+main
+*.exe
+*.o
+*.out
+.venv/
+build/
+bin/
