@@ -30,8 +30,9 @@ OOP-Class/
 ├── week3/               # Week 3 exercises & notes
 ├── week4/               # Week 4 exercises & notes
 ├── week5/               # Week 5 exercises & notes
+│   ├── main.cpp
+│   └── prime.cpp
 ├── playground/          # Scratch files & experiments
-├── prime.cpp            # Prime number checker
 ├── .gitignore
 └── README.md
 ```
