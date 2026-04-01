@@ -1,0 +1,9 @@
+# Compiled binaries
+CppApp1
+main
+prime
+*.o
+*.out
+
+# macOS specific
+.DS_Store
