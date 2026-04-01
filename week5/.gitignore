@@ -2,6 +2,7 @@
 CppApp1
 main
 prime
+complex
 *.o
 *.out
 
