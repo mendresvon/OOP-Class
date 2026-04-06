@@ -9,6 +9,9 @@ main
 *.exe
 *.o
 *.out
+main
+main1
+playground
 .venv/
 build/
 bin/
