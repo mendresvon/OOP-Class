@@ -11,7 +11,14 @@ main
 *.out
 main
 main1
+main2
+main3
 playground
+playground1
+playground2
+*.exe
+*.o
+*.out
 .venv/
 build/
 bin/
