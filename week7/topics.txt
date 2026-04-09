@@ -1,0 +1,4 @@
+pascalcase
+camelcase
+snake camelcase
+screaming snake case
