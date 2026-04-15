@@ -1,7 +1,7 @@
 class Product {
 private:
     double price;   // cannot be set directly from outside
- 
+
 public:
     void setPrice(double p) {
         if (p >= 0) price = p;   // validation enforced here
@@ -10,7 +10,7 @@ public:
         return price;
     }
 };
- 
+
 int main() {
     Product item;
     item.setPrice(29.99);       // ✅ valid
