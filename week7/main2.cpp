@@ -25,5 +25,5 @@ int main() {
   Book b2("C++ Primer", 49.99); // parameterized constructor
   b1.display();                 // Unknown — $0
   b2.display();                 // C++ Primer — $49.99
-  return 0;
+  return 0; // refined comments
 }
