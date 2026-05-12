@@ -4,6 +4,7 @@
 
 using namespace std;
 
+// a simple stack that can hold any type
 template <typename T>
 class Stack {
     vector<T> data;
@@ -15,10 +16,12 @@ public:
 };
 
 int main() {
+    // using it with integers
     Stack<int> si;
     si.push(1); si.push(2); si.push(3);
     cout << si.top() << endl;  
 
+    // using the same class with strings
     Stack<string> ss;
     ss.push("hello"); ss.push("world");
     cout << ss.top() << endl;  
