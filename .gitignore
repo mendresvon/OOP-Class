@@ -27,6 +27,7 @@ fstream
 output.txt
 serialization
 student.dat
+map
 .venv/
 
 build/
