@@ -3,11 +3,11 @@ using namespace std;
 
 int factorial(int n) {
   if (n <= 1)
-    return 1;                  // base case
-  return n * factorial(n - 1); // recursive case
+    return 1;                  
+  return n * factorial(n - 1); 
 }
 
 int main() {
-  cout << "5! = " << factorial(5) << endl; // → 120
+  cout << "5! = " << factorial(5) << endl; 
   return 0;
 }

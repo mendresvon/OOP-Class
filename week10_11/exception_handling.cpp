@@ -10,8 +10,8 @@ double divide(double a, double b) {
 
 int main() {
   try {
-    cout << divide(10, 2) << endl; // → 5
-    cout << divide(5, 0) << endl;  // throws!
+    cout << divide(10, 2) << endl; 
+    cout << divide(5, 0) << endl;  
   } catch (const invalid_argument &e) {
     cerr << "Caught: " << e.what() << endl;
   } catch (...) {

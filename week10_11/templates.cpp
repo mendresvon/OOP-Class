@@ -17,11 +17,11 @@ public:
 int main() {
     Stack<int> si;
     si.push(1); si.push(2); si.push(3);
-    cout << si.top() << endl;  // → 3
+    cout << si.top() << endl;  
 
     Stack<string> ss;
     ss.push("hello"); ss.push("world");
-    cout << ss.top() << endl;  // → world
+    cout << ss.top() << endl;  
 
     return 0;
 }

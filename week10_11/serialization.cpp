@@ -14,7 +14,7 @@ struct Student {
   void deserialize(ifstream &in) {
     getline(in, name);
     in >> id >> gpa;
-    in.ignore(); // consume trailing newline
+    in.ignore(); 
   }
 };
 
