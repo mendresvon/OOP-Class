@@ -25,6 +25,8 @@ custom_exception
 exception_handling
 fstream
 output.txt
+serialization
+student.dat
 .venv/
 
 build/
