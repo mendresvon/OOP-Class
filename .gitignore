@@ -23,7 +23,10 @@ lambda
 templates
 custom_exception
 exception_handling
+fstream
+output.txt
 .venv/
+
 build/
 bin/
 
