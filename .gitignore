@@ -17,9 +17,13 @@ playground
 playground1
 playground2
 playground3
-*.exe
-*.o
-*.out
+factorial
+hanoi
+lambda
+templates
+custom_exception
+exception_handling
 .venv/
 build/
 bin/
+
