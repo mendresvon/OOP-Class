@@ -12,6 +12,14 @@
 #include <algorithm>
 #include <iomanip>
 
+#ifdef _WIN32
+#include <conio.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
+
+
 LibrarySystem::LibrarySystem() : currentUser(nullptr) {}
 
 // Helper: Split string by delimiter
@@ -72,6 +80,56 @@ int LibrarySystem::calculateDaysBetween(const std::string& date1, const std::str
     int days = static_cast<int>(diff / (60 * 60 * 24));
     return days < 0 ? 0 : days;
 }
+
+void LibrarySystem::clearScreen() const {
+#ifdef _WIN32
+    std::system("cls");
+#else
+    std::system("clear");
+#endif
+}
+
+void LibrarySystem::pause() const {
+    std::cout << "\n請按 Enter 鍵繼續...";
+    std::string dummy;
+    std::getline(std::cin, dummy);
+}
+
+std::string LibrarySystem::getMaskedPassword() const {
+    std::string password;
+    char ch;
+#ifdef _WIN32
+    while ((ch = _getch()) != '\r' && ch != '\n') {
+        if (ch == '\b') { // Backspace
+            if (!password.empty()) {
+                password.pop_back();
+                std::cout << "\b \b";
+            }
+        } else if (ch == 0 || (unsigned char)ch == 224) { // Ignore special keys
+            _getch();
+        } else if (ch >= 32 && ch <= 126) {
+            password.push_back(ch);
+            std::cout << '*';
+        }
+    }
+    std::cout << std::endl;
+#else
+    // POSIX terminal masking (Linux / macOS)
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    
+    std::getline(std::cin, password);
+    
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    std::cout << std::endl;
+#endif
+    return password;
+}
+
+
 
 // core: Load all databases from files
 bool LibrarySystem::loadData() {
@@ -242,6 +300,7 @@ void LibrarySystem::run() {
     loadData();
     while (true) {
         if (currentUser == nullptr) {
+            clearScreen();
             std::cout << "\n===============================================\n";
             std::cout << "     歡迎使用 智慧多媒體租借管理系統 (v1.0)     \n";
             std::cout << "===============================================\n";
@@ -262,14 +321,15 @@ void LibrarySystem::run() {
                 user = trim(user);
                 
                 std::cout << "請輸入密碼: ";
-                std::string pass;
-                std::getline(std::cin, pass);
+                std::string pass = getMaskedPassword();
                 pass = trim(pass);
                 
                 if (processLogin(user, pass)) {
                     std::cout << "\n登入成功！歡迎回到系統。\n";
+                    pause();
                 } else {
                     std::cout << "\n❌ 登入失敗：帳號或密碼錯誤。\n";
+                    pause();
                 }
             } else if (choiceStr == "2") {
                 std::cout << "請設定新帳號: ";
@@ -278,8 +338,7 @@ void LibrarySystem::run() {
                 user = trim(user);
                 
                 std::cout << "請設定新密碼: ";
-                std::string pass;
-                std::getline(std::cin, pass);
+                std::string pass = getMaskedPassword();
                 pass = trim(pass);
                 
                 if (processRegister(user, pass)) {
@@ -287,11 +346,14 @@ void LibrarySystem::run() {
                 } else {
                     std::cout << "\n❌ 註冊失敗：此帳號已存在。\n";
                 }
+
+                pause();
             } else if (choiceStr == "3") {
                 std::cout << "\n謝謝使用，再見！\n";
                 break;
             } else {
                 std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
+                pause();
             }
         } else {
             // Polymorphic dispatch to roles
@@ -302,6 +364,7 @@ void LibrarySystem::run() {
 
 // UI: User Menu Loop
 void LibrarySystem::runUserMenu() {
+    clearScreen();
     std::cout << "\n===============================================\n";
     std::cout << "   【使用者控制台】 歡迎, " << currentUser->getUsername() << "! (一般會員)\n";
     std::cout << "===============================================\n";
@@ -331,13 +394,16 @@ void LibrarySystem::runUserMenu() {
     } else if (choiceStr == "6") {
         processLogout();
         std::cout << "\n已成功登出系統。\n";
+        pause();
     } else {
         std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
+        pause();
     }
 }
 
 // UI: Admin Menu Loop
 void LibrarySystem::runAdminMenu() {
+    clearScreen();
     std::cout << "\n===============================================\n";
     std::cout << "      【管理者主控台】 歡迎, " << currentUser->getUsername() << "! (系統管理員)\n";
     std::cout << "===============================================\n";
@@ -364,15 +430,19 @@ void LibrarySystem::runAdminMenu() {
     } else if (choiceStr == "5") {
         processLogout();
         std::cout << "\n已成功登出系統。\n";
+        pause();
     } else {
         std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
+        pause();
     }
 }
+
 
 // User Action: Display all library inventory
 void LibrarySystem::showInventory() const {
     if (inventory.empty()) {
         std::cout << "\n目前圖書館沒有任何館藏庫存。\n";
+        pause();
         return;
     }
     std::cout << "\n----------------------- 圖書館館藏列表 -----------------------\n";
@@ -403,7 +473,9 @@ void LibrarySystem::showInventory() const {
                   << details << "\n";
     }
     std::cout << "------------------------------------------------------------\n";
+    pause();
 }
+
 
 // User Action: Search media items
 void LibrarySystem::searchInventory() const {
@@ -461,7 +533,9 @@ void LibrarySystem::searchInventory() const {
         std::cout << "無匹配的搜尋結果。\n";
     }
     std::cout << "--------------------------------------------------------\n";
+    pause();
 }
+
 
 // User Action: Borrow item
 void LibrarySystem::executeBorrow() {
@@ -481,11 +555,13 @@ void LibrarySystem::executeBorrow() {
 
     if (target == nullptr) {
         std::cout << "\n❌ 錯誤：找不到該館藏 ID。\n";
+        pause();
         return;
     }
 
     if (target->isBorrowedItem()) {
         std::cout << "\n❌ 錯誤：該多媒體已被他人借出中。\n";
+        pause();
         return;
     }
 
@@ -516,7 +592,9 @@ void LibrarySystem::executeBorrow() {
     std::cout << "交易編號: " << rec.recordId << "\n";
     std::cout << "借出項目: 《" << target->getTitle() << "》\n";
     std::cout << "借出日期: " << rec.borrowDate << "\n";
+    pause();
 }
+
 
 // User Action: Return item
 void LibrarySystem::executeReturn() {
@@ -526,6 +604,7 @@ void LibrarySystem::executeReturn() {
     const auto& borrowed = user->getBorrowedIds();
     if (borrowed.empty()) {
         std::cout << "\n您目前手頭沒有任何未歸還的借閱項目。\n";
+        pause();
         return;
     }
 
@@ -545,6 +624,7 @@ void LibrarySystem::executeReturn() {
 
     if (!user->removeBorrowedId(id)) {
         std::cout << "\n❌ 錯誤：輸入的 ID 不在您的借閱清單中。\n";
+        pause();
         return;
     }
 
@@ -589,7 +669,9 @@ void LibrarySystem::executeReturn() {
     std::cout << "歸還項目: 《" << (target ? target->getTitle() : "未知") << "》\n";
     std::cout << "借閱天數: " << durationDays << " 天\n";
     std::cout << "應付租金/滯納金: NT$ " << calculatedFee << " 元\n";
+    pause();
 }
+
 
 // User Action: View rental records
 void LibrarySystem::showUserRentalHistory() const {
@@ -629,7 +711,9 @@ void LibrarySystem::showUserRentalHistory() const {
         std::cout << ">>> 未歸還項目當前估計應繳租金總計: NT$ " << unpaidTotal << " 元\n";
     }
     std::cout << "--------------------------------------------------------------------\n";
+    pause();
 }
+
 
 // Admin Action: Add new media item
 void LibrarySystem::adminAddMedia() {
@@ -644,6 +728,7 @@ void LibrarySystem::adminAddMedia() {
 
     if (typeChoice != "1" && typeChoice != "2" && typeChoice != "3") {
         std::cout << "❌ 錯誤：無效的類別選取。\n";
+        pause();
         return;
     }
 
@@ -656,6 +741,7 @@ void LibrarySystem::adminAddMedia() {
     for (const auto& item : inventory) {
         if (item->getId() == id) {
             std::cout << "❌ 錯誤：ID 已存在，不可重複建立。\n";
+            pause();
             return;
         }
     }
@@ -705,7 +791,9 @@ void LibrarySystem::adminAddMedia() {
 
     saveData();
     std::cout << "\n🎉 館藏上架新增成功！\n";
+    pause();
 }
+
 
 // Admin Action: Delete media item
 void LibrarySystem::adminRemoveMedia() {
@@ -720,6 +808,7 @@ void LibrarySystem::adminRemoveMedia() {
 
     if (it == inventory.end()) {
         std::cout << "❌ 錯誤：找不到該館藏 ID，無法下架。\n";
+        pause();
         return;
     }
 
@@ -738,7 +827,9 @@ void LibrarySystem::adminRemoveMedia() {
     saveData();
 
     std::cout << "\n🎉 館藏 ID: " << id << " 已成功下架刪除！\n";
+    pause();
 }
+
 
 // Admin Action: View all system user accounts
 void LibrarySystem::adminViewAllAccounts() const {
@@ -770,13 +861,16 @@ void LibrarySystem::adminViewAllAccounts() const {
                   << extra << "\n";
     }
     std::cout << "--------------------------------------------------------------\n";
+    pause();
 }
+
 
 // Admin Action: View all logs
 void LibrarySystem::adminViewAllRecords() const {
     std::cout << "\n----------------------- 全系統借閱交易日誌 -----------------------\n";
     if (allRecords.empty()) {
         std::cout << "目前系統中無任何交易日誌紀錄。\n";
+        pause();
         return;
     }
     
@@ -793,4 +887,6 @@ void LibrarySystem::adminViewAllRecords() const {
                   << rec.status << "\n";
     }
     std::cout << "--------------------------------------------------------------------------------------------------\n";
+    pause();
 }
+

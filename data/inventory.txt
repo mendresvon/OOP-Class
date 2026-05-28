@@ -4,3 +4,4 @@ DVD,D001,Inception,0,Christopher Nolan,148
 DVD,D002,Interstellar,0,Christopher Nolan,169
 MAGAZINE,M001,Scientific American,0,2026,5
 MAGAZINE,M002,Time Magazine,1,2026,6
+BOOK,12345678,如何當一個傻人,0,陳小明,87453

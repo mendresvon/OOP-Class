@@ -20,6 +20,11 @@ private:
     std::string trim(const std::string& str) const;
     std::string getTodayDateStr() const;
     int calculateDaysBetween(const std::string& date1, const std::string& date2) const;
+    void clearScreen() const;
+    void pause() const;
+    std::string getMaskedPassword() const;
+
+
 
 public:
     LibrarySystem();
