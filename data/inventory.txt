@@ -1,0 +1,6 @@
+BOOK,B001,C++ Primer Plus,1,Stephen Prata,978-0321776402
+BOOK,B002,Effective Modern C++,0,Scott Meyers,978-1491903995
+DVD,D001,Inception,0,Christopher Nolan,148
+DVD,D002,Interstellar,0,Christopher Nolan,169
+MAGAZINE,M001,Scientific American,0,2026,5
+MAGAZINE,M002,Time Magazine,1,2026,6

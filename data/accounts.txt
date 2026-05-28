@@ -1,0 +1,3 @@
+admin,admin123,ADMIN,1
+alex,user123,USER,B001;M002
+bob,user123,USER,
