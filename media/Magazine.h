@@ -10,7 +10,8 @@ private:
 
 public:
     Magazine(const std::string& id, const std::string& title, bool isBorrowed,
-             int issueNum, int month);
+             int issueNum, int month, const std::string& status = "ACTIVE");
+
 
     int getIssueNum() const;
     int getMonth() const;

@@ -129,6 +129,70 @@ std::string LibrarySystem::getMaskedPassword() const {
     return password;
 }
 
+int LibrarySystem::getMenuSelection(const std::vector<std::string>& options, const std::string& title) const {
+    if (options.empty()) return -1;
+    int selected = 0;
+    while (true) {
+        clearScreen();
+        std::cout << title << "\n";
+        
+        for (size_t i = 0; i < options.size(); ++i) {
+            if (static_cast<int>(i) == selected) {
+                // Highlight option with reverse video ANSI 7m
+                std::cout << "\033[7m  ➔ " << options[i] << "  \033[0m\n";
+            } else {
+                std::cout << "     " << options[i] << "\n";
+            }
+        }
+        std::cout << "\n===============================================\n";
+        std::cout << "(提示: 請使用 ⌨️ 上下鍵 [↑][↓] 移動，按下 [Enter] 確認選擇)\n";
+        
+#ifdef _WIN32
+        char ch = _getch();
+        if ((unsigned char)ch == 224 || ch == 0) { // Special keys prefix
+            char arrow = _getch();
+            if (arrow == 72) {      // Up arrow
+                selected = (selected - 1 + options.size()) % options.size();
+            } else if (arrow == 80) { // Down arrow
+                selected = (selected + 1) % options.size();
+            }
+        } else if (ch == 13 || ch == 10) { // Enter key
+            break;
+        }
+#else
+        // POSIX keyboard arrow key intercept fallback using standard terminal modes
+        struct termios oldt, newt;
+        tcgetattr(STDIN_FILENO, &oldt);
+        newt = oldt;
+        newt.c_lflag &= ~(ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+        
+        char ch;
+        int n = read(STDIN_FILENO, &ch, 1);
+        if (n > 0) {
+            if (ch == 27) { // Escape sequence for arrow keys
+                char seq[2];
+                if (read(STDIN_FILENO, &seq[0], 1) > 0 && read(STDIN_FILENO, &seq[1], 1) > 0) {
+                    if (seq[0] == '[') {
+                        if (seq[1] == 'A') { // Up arrow
+                            selected = (selected - 1 + options.size()) % options.size();
+                        } else if (seq[1] == 'B') { // Down arrow
+                            selected = (selected + 1) % options.size();
+                        }
+                    }
+                }
+            } else if (ch == 10 || ch == 13) { // Enter key
+                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+                break;
+            }
+        }
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+#endif
+    }
+    return selected;
+}
+
+
 
 
 // core: Load all databases from files
@@ -152,16 +216,22 @@ bool LibrarySystem::loadData() {
             std::string title = fields[2];
             bool isBorrowed = (fields[3] == "1");
 
+            std::string status = "ACTIVE";
+            if (fields.size() >= 7) {
+                status = fields[6];
+            }
+
             if (type == "BOOK" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Book>(id, title, isBorrowed, fields[4], fields[5]));
+                inventory.push_back(std::make_shared<Book>(id, title, isBorrowed, fields[4], fields[5], status));
             } else if (type == "DVD" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Dvd>(id, title, isBorrowed, fields[4], std::stoi(fields[5])));
+                inventory.push_back(std::make_shared<Dvd>(id, title, isBorrowed, fields[4], std::stoi(fields[5]), status));
             } else if (type == "MAGAZINE" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Magazine>(id, title, isBorrowed, std::stoi(fields[4]), std::stoi(fields[5])));
+                inventory.push_back(std::make_shared<Magazine>(id, title, isBorrowed, std::stoi(fields[4]), std::stoi(fields[5]), status));
             }
         }
         invFile.close();
     }
+
 
     // 2. Load Accounts
     std::ifstream accFile("data/accounts.txt");
@@ -300,21 +370,18 @@ void LibrarySystem::run() {
     loadData();
     while (true) {
         if (currentUser == nullptr) {
-            clearScreen();
-            std::cout << "\n===============================================\n";
-            std::cout << "     歡迎使用 智慧多媒體租借管理系統 (v1.0)     \n";
-            std::cout << "===============================================\n";
-            std::cout << "  1. 登入系統\n";
-            std::cout << "  2. 註冊帳號\n";
-            std::cout << "  3. 離開系統\n";
-            std::cout << "===============================================\n";
-            std::cout << "請輸入您的選擇 (1-3): ";
+            std::vector<std::string> options = {
+                "登入系統",
+                "註冊帳號",
+                "離開系統"
+            };
+            std::string title = "\n===============================================\n"
+                                "     歡迎使用 智慧多媒體租借管理系統 (v1.0)     \n"
+                                "===============================================\n"
+                                "請選擇操作項目:";
+            int selection = getMenuSelection(options, title);
             
-            std::string choiceStr;
-            std::getline(std::cin, choiceStr);
-            choiceStr = trim(choiceStr);
-            
-            if (choiceStr == "1") {
+            if (selection == 0) {
                 std::cout << "請輸入帳號: ";
                 std::string user;
                 std::getline(std::cin, user);
@@ -331,7 +398,7 @@ void LibrarySystem::run() {
                     std::cout << "\n❌ 登入失敗：帳號或密碼錯誤。\n";
                     pause();
                 }
-            } else if (choiceStr == "2") {
+            } else if (selection == 1) {
                 std::cout << "請設定新帳號: ";
                 std::string user;
                 std::getline(std::cin, user);
@@ -348,12 +415,9 @@ void LibrarySystem::run() {
                 }
 
                 pause();
-            } else if (choiceStr == "3") {
+            } else if (selection == 2) {
                 std::cout << "\n謝謝使用，再見！\n";
                 break;
-            } else {
-                std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
-                pause();
             }
         } else {
             // Polymorphic dispatch to roles
@@ -364,75 +428,66 @@ void LibrarySystem::run() {
 
 // UI: User Menu Loop
 void LibrarySystem::runUserMenu() {
-    clearScreen();
-    std::cout << "\n===============================================\n";
-    std::cout << "   【使用者控制台】 歡迎, " << currentUser->getUsername() << "! (一般會員)\n";
-    std::cout << "===============================================\n";
-    std::cout << "  1. 瀏覽所有館藏 (圖書/DVD/雜誌)\n";
-    std::cout << "  2. 搜尋館藏 (按關鍵字/類型)\n";
-    std::cout << "  3. 借閱多媒體 (輸入 ID)\n";
-    std::cout << "  4. 歸還多媒體 (輸入 ID)\n";
-    std::cout << "  5. 查看我的借閱紀錄 & 應付租金\n";
-    std::cout << "  6. 登出系統\n";
-    std::cout << "===============================================\n";
-    std::cout << "請輸入您的選擇 (1-6): ";
+    std::vector<std::string> options = {
+        "瀏覽所有館藏 (圖書/DVD/雜誌)",
+        "搜尋館藏 (按關鍵字/類型)",
+        "借閱多媒體 (輸入 ID)",
+        "歸還多媒體 (輸入 ID)",
+        "查看我的借閱紀錄 & 應付租金",
+        "登出系統"
+    };
+    std::string title = "\n===============================================\n"
+                        "   【使用者控制台】 歡迎, " + currentUser->getUsername() + "! (一般會員)\n"
+                        "===============================================\n"
+                        "請選擇操作項目:";
+    int selection = getMenuSelection(options, title);
 
-    std::string choiceStr;
-    std::getline(std::cin, choiceStr);
-    choiceStr = trim(choiceStr);
-
-    if (choiceStr == "1") {
+    if (selection == 0) {
         showInventory();
-    } else if (choiceStr == "2") {
+    } else if (selection == 1) {
         searchInventory();
-    } else if (choiceStr == "3") {
+    } else if (selection == 2) {
         executeBorrow();
-    } else if (choiceStr == "4") {
+    } else if (selection == 3) {
         executeReturn();
-    } else if (choiceStr == "5") {
+    } else if (selection == 4) {
         showUserRentalHistory();
-    } else if (choiceStr == "6") {
+    } else if (selection == 5) {
         processLogout();
         std::cout << "\n已成功登出系統。\n";
-        pause();
-    } else {
-        std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
         pause();
     }
 }
 
 // UI: Admin Menu Loop
 void LibrarySystem::runAdminMenu() {
-    clearScreen();
-    std::cout << "\n===============================================\n";
-    std::cout << "      【管理者主控台】 歡迎, " << currentUser->getUsername() << "! (系統管理員)\n";
-    std::cout << "===============================================\n";
-    std::cout << "  1. 新增多媒體館藏 (圖書/DVD/雜誌)\n";
-    std::cout << "  2. 下架/刪除多媒體館藏\n";
-    std::cout << "  3. 查看所有使用者名單 & 借閱狀態\n";
-    std::cout << "  4. 檢視全館租借交易日誌 (Rental Log)\n";
-    std::cout << "  5. 登出系統\n";
-    std::cout << "===============================================\n";
-    std::cout << "請輸入您的選擇 (1-5): ";
+    std::vector<std::string> options = {
+        "新增多媒體館藏 (圖書/DVD/雜誌)",
+        "下架/刪除多媒體館藏",
+        "查看所有使用者名單 & 借閱狀態",
+        "檢視全館租借交易日誌 (Rental Log)",
+        "資源回收桶與封存管理中心",
+        "登出系統"
+    };
+    std::string title = "\n===============================================\n"
+                        "      【管理者主控台】 歡迎, " + currentUser->getUsername() + "! (系統管理員)\n"
+                        "===============================================\n"
+                        "請選擇操作項目:";
+    int selection = getMenuSelection(options, title);
 
-    std::string choiceStr;
-    std::getline(std::cin, choiceStr);
-    choiceStr = trim(choiceStr);
-
-    if (choiceStr == "1") {
+    if (selection == 0) {
         adminAddMedia();
-    } else if (choiceStr == "2") {
+    } else if (selection == 1) {
         adminRemoveMedia();
-    } else if (choiceStr == "3") {
+    } else if (selection == 2) {
         adminViewAllAccounts();
-    } else if (choiceStr == "4") {
+    } else if (selection == 3) {
         adminViewAllRecords();
-    } else if (choiceStr == "5") {
+    } else if (selection == 4) {
+        adminRecycleBinMenu();
+    } else if (selection == 5) {
         processLogout();
         std::cout << "\n已成功登出系統。\n";
-        pause();
-    } else {
-        std::cout << "\n❌ 無效的選擇，請重新輸入。\n";
         pause();
     }
 }
@@ -445,10 +500,29 @@ void LibrarySystem::showInventory() const {
         pause();
         return;
     }
+    
+    // Check if there is any visible item for regular users
+    bool hasVisible = false;
+    for (const auto& item : inventory) {
+        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
+            continue;
+        }
+        hasVisible = true;
+        break;
+    }
+    if (!hasVisible) {
+        std::cout << "\n目前圖書館沒有任何館藏庫存。\n";
+        pause();
+        return;
+    }
+
     std::cout << "\n----------------------- 圖書館館藏列表 -----------------------\n";
     std::cout << std::left << std::setw(8) << "ID" << std::setw(25) << "名稱" << std::setw(10) << "類別" << std::setw(10) << "狀態" << "詳細資料\n";
     std::cout << "------------------------------------------------------------\n";
     for (const auto& item : inventory) {
+        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
+            continue;
+        }
         std::string type = "未知";
         std::string details = "";
         
@@ -492,6 +566,9 @@ void LibrarySystem::searchInventory() const {
     std::cout << "\n----------------------- 搜尋結果 -----------------------\n";
     bool found = false;
     for (const auto& item : inventory) {
+        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
+            continue;
+        }
         std::string titleLower = item->getTitle();
         std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::tolower);
 
@@ -548,6 +625,9 @@ void LibrarySystem::executeBorrow() {
     std::shared_ptr<MediaItem> target = nullptr;
     for (const auto& item : inventory) {
         if (item->getId() == id) {
+            if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
+                continue;
+            }
             target = item;
             break;
         }
@@ -797,23 +877,52 @@ void LibrarySystem::adminAddMedia() {
 
 // Admin Action: Delete media item
 void LibrarySystem::adminRemoveMedia() {
-    std::cout << "請輸入欲下架刪除的館藏 ID: ";
-    std::string id;
-    std::getline(std::cin, id);
-    id = trim(id);
+    std::vector<std::shared_ptr<MediaItem>> activeItems;
+    for (const auto& item : inventory) {
+        if (item->getStatus() == "ACTIVE") {
+            activeItems.push_back(item);
+        }
+    }
 
-    auto it = std::find_if(inventory.begin(), inventory.end(), [&](const std::shared_ptr<MediaItem>& item) {
-        return item->getId() == id;
-    });
-
-    if (it == inventory.end()) {
-        std::cout << "❌ 錯誤：找不到該館藏 ID，無法下架。\n";
+    if (activeItems.empty()) {
+        std::cout << "\n目前沒有任何上架中的館藏庫存可供下架。\n";
         pause();
         return;
     }
 
-    if ((*it)->isBorrowedItem()) {
-        std::cout << "⚠️ 警告：該館藏目前處於借出狀態，下架將強制回收資料。\n";
+    std::vector<std::string> options;
+    for (const auto& item : activeItems) {
+        std::string type = "未知";
+        if (std::dynamic_pointer_cast<Book>(item)) {
+            type = "圖書";
+        } else if (std::dynamic_pointer_cast<Dvd>(item)) {
+            type = "影音";
+        } else if (std::dynamic_pointer_cast<Magazine>(item)) {
+            type = "期刊";
+        }
+        std::string opt = "[" + type + "] ID: " + item->getId() + " - " + item->getTitle();
+        if (item->isBorrowedItem()) {
+            opt += " (⚠️借出中)";
+        }
+        options.push_back(opt);
+    }
+    options.push_back("返回管理者主控台");
+
+    std::string title = "\n===============================================\n"
+                        "            【下架/刪除多媒體館藏】            \n"
+                        "===============================================\n"
+                        "請選擇欲下架刪除的項目:";
+    int selection = getMenuSelection(options, title);
+
+    if (selection == static_cast<int>(activeItems.size())) {
+        return; // User cancelled
+    }
+
+    auto target = activeItems[selection];
+    std::string id = target->getId();
+
+    if (target->isBorrowedItem()) {
+        std::cout << "⚠️ 警告：該館藏目前處於借出狀態，下架將強制收回並結清租用紀錄。\n";
         // Force remove from all users' borrowed lists
         for (auto& acc : accounts) {
             if (acc->getRole() == "USER") {
@@ -823,10 +932,10 @@ void LibrarySystem::adminRemoveMedia() {
         }
     }
 
-    inventory.erase(it);
+    target->setStatus("ARCHIVED");
     saveData();
 
-    std::cout << "\n🎉 館藏 ID: " << id << " 已成功下架刪除！\n";
+    std::cout << "\n🎉 館藏 《" << target->getTitle() << "》 (ID: " << id << ") 已成功下架移至回收桶！\n";
     pause();
 }
 
@@ -888,5 +997,141 @@ void LibrarySystem::adminViewAllRecords() const {
     }
     std::cout << "--------------------------------------------------------------------------------------------------\n";
     pause();
+}
+
+
+// Admin Action: Recycle Bin & Archive Management Center
+void LibrarySystem::adminRecycleBinMenu() {
+    while (true) {
+        std::vector<std::string> options = {
+            "檢視回收桶內容 (封存項目列表)",
+            "還原重新上架已封存項目",
+            "徹底清空回收桶 (硬刪除)",
+            "返回管理者主控台"
+        };
+        std::string title = "\n===============================================\n"
+                            "       【資源回收桶與封存管理中心】       \n"
+                            "===============================================\n"
+                            "請選擇操作項目:";
+        int selection = getMenuSelection(options, title);
+
+        if (selection == 0) {
+            clearScreen();
+            std::cout << "\n----------------------- 資源回收桶 (封存項目) -----------------------\n";
+            std::vector<std::shared_ptr<MediaItem>> archivedItems;
+            for (const auto& item : inventory) {
+                if (item->getStatus() == "ARCHIVED") {
+                    archivedItems.push_back(item);
+                }
+            }
+
+            if (archivedItems.empty()) {
+                std::cout << "資源回收桶目前是空的。\n";
+            } else {
+                std::cout << std::left << std::setw(8) << "ID" << std::setw(25) << "名稱" << std::setw(10) << "類別" << "詳細資料\n";
+                std::cout << "-------------------------------------------------------------------\n";
+                for (const auto& item : archivedItems) {
+                    std::string type = "未知";
+                    std::string details = "";
+                    
+                    if (std::dynamic_pointer_cast<Book>(item)) {
+                        type = "圖書 (Book)";
+                        auto book = std::dynamic_pointer_cast<Book>(item);
+                        details = "作者: " + book->getAuthor() + " | ISBN: " + book->getIsbn();
+                    } else if (std::dynamic_pointer_cast<Dvd>(item)) {
+                        type = "影音 (DVD)";
+                        auto dvd = std::dynamic_pointer_cast<Dvd>(item);
+                        details = "導演: " + dvd->getDirector() + " | 片長: " + std::to_string(dvd->getDuration()) + " 分鐘";
+                    } else if (std::dynamic_pointer_cast<Magazine>(item)) {
+                        type = "期刊 (Mag)";
+                        auto mag = std::dynamic_pointer_cast<Magazine>(item);
+                        details = "期號: " + std::to_string(mag->getIssueNum()) + " | 出版月份: " + std::to_string(mag->getMonth()) + "月";
+                    }
+
+                    std::cout << std::left << std::setw(8) << item->getId()
+                              << std::setw(25) << (item->getTitle().length() > 22 ? item->getTitle().substr(0, 20) + ".." : item->getTitle())
+                              << std::setw(10) << type
+                              << details << "\n";
+                }
+            }
+            std::cout << "-------------------------------------------------------------------\n";
+            pause();
+        } else if (selection == 1) {
+            std::vector<std::shared_ptr<MediaItem>> archivedItems;
+            for (const auto& item : inventory) {
+                if (item->getStatus() == "ARCHIVED") {
+                    archivedItems.push_back(item);
+                }
+            }
+
+            if (archivedItems.empty()) {
+                std::cout << "\n資源回收桶目前沒有任何可還原的項目。\n";
+                pause();
+                continue;
+            }
+
+            std::vector<std::string> restoreOpts;
+            for (const auto& item : archivedItems) {
+                std::string type = "未知";
+                if (std::dynamic_pointer_cast<Book>(item)) type = "圖書";
+                else if (std::dynamic_pointer_cast<Dvd>(item)) type = "影音";
+                else if (std::dynamic_pointer_cast<Magazine>(item)) type = "期刊";
+                restoreOpts.push_back("[" + type + "] ID: " + item->getId() + " - " + item->getTitle());
+            }
+            restoreOpts.push_back("返回回收桶主選單");
+
+            std::string restoreTitle = "\n===============================================\n"
+                                       "            【還原重新上架已封存項目】            \n"
+                                       "===============================================\n"
+                                       "請選擇欲還原重新上架的項目:";
+            int restoreSel = getMenuSelection(restoreOpts, restoreTitle);
+
+            if (restoreSel == static_cast<int>(archivedItems.size())) {
+                continue;
+            }
+
+            auto target = archivedItems[restoreSel];
+            target->setStatus("ACTIVE");
+            saveData();
+            std::cout << "\n🎉 館藏 《" << target->getTitle() << "》 (ID: " << target->getId() << ") 已成功重新上架！\n";
+            pause();
+        } else if (selection == 2) {
+            std::vector<std::shared_ptr<MediaItem>> archivedItems;
+            for (const auto& item : inventory) {
+                if (item->getStatus() == "ARCHIVED") {
+                    archivedItems.push_back(item);
+                }
+            }
+
+            if (archivedItems.empty()) {
+                std::cout << "\n資源回收桶目前已經是空的。\n";
+                pause();
+                continue;
+            }
+
+            std::cout << "\n⚠️ 警告：您確定要徹底清空資源回收桶嗎？這將永久刪除 " << archivedItems.size() << " 個項目，且無法復原！\n";
+            std::vector<std::string> confirmOpts = { "否 (取消)", "是 (確定清空)" };
+            int confirmSel = getMenuSelection(confirmOpts, "請確認此危險操作:");
+            
+            if (confirmSel == 1) {
+                inventory.erase(
+                    std::remove_if(inventory.begin(), inventory.end(),
+                        [](const std::shared_ptr<MediaItem>& item) {
+                            return item->getStatus() == "ARCHIVED";
+                        }
+                    ),
+                    inventory.end()
+                );
+                saveData();
+                std::cout << "\n🎉 資源回收桶已徹底清空，所有封存項目已被硬刪除！\n";
+                pause();
+            } else {
+                std::cout << "\n已取消清空操作。\n";
+                pause();
+            }
+        } else if (selection == 3) {
+            break;
+        }
+    }
 }
 

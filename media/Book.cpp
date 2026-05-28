@@ -2,8 +2,8 @@
 #include <sstream>
 
 Book::Book(const std::string& id, const std::string& title, bool isBorrowed,
-           const std::string& author, const std::string& isbn)
-    : MediaItem(id, title, isBorrowed), author(author), isbn(isbn) {}
+           const std::string& author, const std::string& isbn, const std::string& status)
+    : MediaItem(id, title, isBorrowed, status), author(author), isbn(isbn) {}
 
 std::string Book::getAuthor() const {
     return author;
@@ -23,6 +23,7 @@ double Book::getFee(int days) const {
 
 std::string Book::serialize() const {
     std::stringstream ss;
-    ss << "BOOK," << id << "," << title << "," << (isBorrowed ? "1" : "0") << "," << author << "," << isbn;
+    ss << "BOOK," << id << "," << title << "," << (isBorrowed ? "1" : "0") << "," << author << "," << isbn << "," << status;
     return ss.str();
 }
+

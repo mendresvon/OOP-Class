@@ -23,6 +23,8 @@ private:
     void clearScreen() const;
     void pause() const;
     std::string getMaskedPassword() const;
+    int getMenuSelection(const std::vector<std::string>& options, const std::string& title) const;
+
 
 
 
@@ -56,6 +58,7 @@ public:
     void adminRemoveMedia();
     void adminViewAllAccounts() const;
     void adminViewAllRecords() const;
+    void adminRecycleBinMenu();
 };
 
 #endif

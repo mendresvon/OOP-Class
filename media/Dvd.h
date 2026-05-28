@@ -10,7 +10,8 @@ private:
 
 public:
     Dvd(const std::string& id, const std::string& title, bool isBorrowed,
-        const std::string& director, int duration);
+        const std::string& director, int duration, const std::string& status = "ACTIVE");
+
 
     std::string getDirector() const;
     int getDuration() const;

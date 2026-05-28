@@ -10,7 +10,8 @@ private:
 
 public:
     Book(const std::string& id, const std::string& title, bool isBorrowed,
-         const std::string& author, const std::string& isbn);
+         const std::string& author, const std::string& isbn, const std::string& status = "ACTIVE");
+
 
     std::string getAuthor() const;
     std::string getIsbn() const;

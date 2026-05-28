@@ -2,8 +2,8 @@
 #include <sstream>
 
 Magazine::Magazine(const std::string& id, const std::string& title, bool isBorrowed,
-                   int issueNum, int month)
-    : MediaItem(id, title, isBorrowed), issueNum(issueNum), month(month) {}
+                   int issueNum, int month, const std::string& status)
+    : MediaItem(id, title, isBorrowed, status), issueNum(issueNum), month(month) {}
 
 int Magazine::getIssueNum() const {
     return issueNum;
@@ -23,6 +23,7 @@ double Magazine::getFee(int days) const {
 
 std::string Magazine::serialize() const {
     std::stringstream ss;
-    ss << "MAGAZINE," << id << "," << title << "," << (isBorrowed ? "1" : "0") << "," << issueNum << "," << month;
+    ss << "MAGAZINE," << id << "," << title << "," << (isBorrowed ? "1" : "0") << "," << issueNum << "," << month << "," << status;
     return ss.str();
 }
+
