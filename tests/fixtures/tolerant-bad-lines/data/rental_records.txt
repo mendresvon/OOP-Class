@@ -1,0 +1,2 @@
+# format=kv-v1
+recordId=REC_1|username=user1|itemId=B001|itemTitle=Sample|borrowDate=2026-06-01|returnDate=Pending|rentalFee=oops|status=BORROWED

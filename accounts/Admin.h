@@ -8,7 +8,8 @@ private:
     int adminLevel;
 
 public:
-    Admin(const std::string& username, const std::string& password, int adminLevel = 1);
+    Admin(const std::string& username, const std::string& passwordOrHash,
+          int adminLevel = 1, bool isHashedData = false, const std::string& salt = "");
 
     int getAdminLevel() const;
     void setAdminLevel(int level);

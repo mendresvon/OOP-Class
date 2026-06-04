@@ -1,7 +1,7 @@
 # media-rental-system Specification
 
 ## Purpose
-TBD - created by archiving change smart-media-rental-system. Update Purpose after archive.
+Define media item modeling, inventory lookup behavior, and administrator media lifecycle actions.
 ## Requirements
 ### Requirement: Polymorphic Media Representation
 The system SHALL model media items as polymorphic objects through a base class `MediaItem` and three derived classes: `Book`, `Dvd`, and `Magazine`. Each concrete class MUST provide its own implementation of the virtual `getFee` function and `serialize` function.
@@ -16,6 +16,10 @@ The system SHALL allow users and administrators to search for media items by uni
 #### Scenario: Searching media by keyword
 - **WHEN** user inputs a search keyword that matches a portion of the media title
 - **THEN** the system SHALL output a filtered list of all matching media items.
+
+#### Scenario: Search skips archived inventory for normal users
+- **WHEN** a normal user performs inventory browsing or search
+- **THEN** items with `status=ARCHIVED` SHALL be excluded from the result.
 
 ### Requirement: Add and Remove Media Items
 The system SHALL allow administrators to add new media items to the inventory or remove existing ones. Removing an item SHALL NOT physically delete it immediately; instead, it MUST be soft-deleted and placed in the Recycle Bin by setting its status tag to `ARCHIVED`.

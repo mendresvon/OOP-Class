@@ -9,7 +9,8 @@ private:
     std::vector<std::string> borrowedIds;
 
 public:
-    User(const std::string& username, const std::string& password);
+    User(const std::string& username, const std::string& passwordOrHash,
+         bool isHashedData = false, const std::string& salt = "");
 
     const std::vector<std::string>& getBorrowedIds() const;
     void addBorrowedId(const std::string& id);

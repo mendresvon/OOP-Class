@@ -1,4 +1,6 @@
 #include "LibrarySystem.h"
+#include "MenuRenderer.h"
+#include "LibraryService.h"
 #include "media/Book.h"
 #include "media/Dvd.h"
 #include "media/Magazine.h"
@@ -11,363 +13,659 @@
 #include <ctime>
 #include <algorithm>
 #include <iomanip>
+#include <unordered_map>
+#include <cstdio>
 
-#ifdef _WIN32
-#include <conio.h>
-#else
-#include <termios.h>
-#include <unistd.h>
-#endif
+namespace {
+constexpr const char* kKvV1Header = "# format=kv-v1";
 
-
-LibrarySystem::LibrarySystem() : currentUser(nullptr) {}
-
-// Helper: Split string by delimiter
-std::vector<std::string> LibrarySystem::split(const std::string& str, char delimiter) const {
-    std::vector<std::string> tokens;
-    std::string token;
-    std::stringstream ss(str);
-    while (std::getline(ss, token, delimiter)) {
-        tokens.push_back(token);
+std::string escapeValue(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char ch : value) {
+        switch (ch) {
+            case '\\': escaped += "\\\\"; break;
+            case '|': escaped += "\\|"; break;
+            case '=': escaped += "\\="; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            default: escaped += ch; break;
+        }
     }
+    return escaped;
+}
+
+std::string unescapeValue(const std::string& value) {
+    std::string result;
+    result.reserve(value.size());
+    bool escaped = false;
+    for (char ch : value) {
+        if (!escaped) {
+            if (ch == '\\') {
+                escaped = true;
+            } else {
+                result += ch;
+            }
+            continue;
+        }
+
+        switch (ch) {
+            case '\\': result += '\\'; break;
+            case '|': result += '|'; break;
+            case '=': result += '='; break;
+            case 'n': result += '\n'; break;
+            case 'r': result += '\r'; break;
+            default: result += ch; break;
+        }
+        escaped = false;
+    }
+
+    if (escaped) {
+        result += '\\';
+    }
+    return result;
+}
+
+std::size_t findUnescapedChar(const std::string& text, char target) {
+    bool escaped = false;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        char ch = text[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == target) {
+            return i;
+        }
+    }
+    return std::string::npos;
+}
+
+std::vector<std::string> splitByUnescapedChar(const std::string& text, char delimiter) {
+    std::vector<std::string> tokens;
+    std::string current;
+    bool escaped = false;
+    for (char ch : text) {
+        if (escaped) {
+            current += '\\';
+            current += ch;
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == delimiter) {
+            tokens.push_back(current);
+            current.clear();
+            continue;
+        }
+        current += ch;
+    }
+    if (escaped) {
+        current += '\\';
+    }
+    tokens.push_back(current);
     return tokens;
 }
 
-// Helper: Trim whitespace from both ends
-std::string LibrarySystem::trim(const std::string& str) const {
+std::string trimCopy(const std::string& str) {
     size_t first = str.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return "";
     size_t last = str.find_last_not_of(" \t\r\n");
     return str.substr(first, (last - first + 1));
 }
 
-// Helper: Get today's date in YYYY-MM-DD
-std::string LibrarySystem::getTodayDateStr() const {
-    std::time_t t = std::time(nullptr);
-    std::tm* now = std::localtime(&t);
-    char buf[20];
-    std::strftime(buf, sizeof(buf), "%Y-%m-%d", now);
-    return std::string(buf);
+std::vector<std::string> splitByChar(const std::string& str, char delimiter) {
+    std::vector<std::string> tokens;
+    std::stringstream ss(str);
+    std::string token;
+    while (std::getline(ss, token, delimiter)) {
+        tokens.push_back(token);
+    }
+    return tokens;
 }
 
-// Helper: Calculate days between two date strings (YYYY-MM-DD)
-int LibrarySystem::calculateDaysBetween(const std::string& date1, const std::string& date2) const {
-    if (date1 == "Pending" || date2 == "Pending") return 0;
-    
-    std::tm tm1 = {};
-    std::tm tm2 = {};
-    std::stringstream ss1(date1);
-    std::stringstream ss2(date2);
-    
-    char dash;
-    ss1 >> tm1.tm_year >> dash >> tm1.tm_mon >> dash >> tm1.tm_mday;
-    ss2 >> tm2.tm_year >> dash >> tm2.tm_mon >> dash >> tm2.tm_mday;
-    
-    tm1.tm_year -= 1900;
-    tm1.tm_mon -= 1;
-    tm1.tm_isdst = -1;
-    
-    tm2.tm_year -= 1900;
-    tm2.tm_mon -= 1;
-    tm2.tm_isdst = -1;
-    
-    std::time_t t1 = std::mktime(&tm1);
-    std::time_t t2 = std::mktime(&tm2);
-    
-    if (t1 == -1 || t2 == -1) return 0;
-    
-    double diff = std::difftime(t2, t1);
-    int days = static_cast<int>(diff / (60 * 60 * 24));
-    return days < 0 ? 0 : days;
+using FieldMap = std::unordered_map<std::string, std::string>;
+
+bool parseKvLine(const std::string& line, FieldMap& out) {
+    out.clear();
+    auto parts = splitByUnescapedChar(line, '|');
+    for (const auto& part : parts) {
+        auto eqPos = findUnescapedChar(part, '=');
+        if (eqPos == std::string::npos || eqPos == 0) {
+            return false;
+        }
+        std::string key = unescapeValue(trimCopy(part.substr(0, eqPos)));
+        std::string value = unescapeValue(trimCopy(part.substr(eqPos + 1)));
+        if (key.empty()) {
+            return false;
+        }
+        out[key] = value;
+    }
+    return !out.empty();
 }
 
-void LibrarySystem::clearScreen() const {
-#ifdef _WIN32
-    std::system("cls");
-#else
-    std::system("clear");
-#endif
+void reportParseIssue(std::vector<std::string>& issues,
+                      const std::string& filePath,
+                      std::size_t lineNumber,
+                      const std::string& message,
+                      const std::string& rawLine) {
+    std::ostringstream oss;
+    oss << filePath << ':' << lineNumber << " - " << message;
+    if (!rawLine.empty()) {
+        oss << " | " << rawLine;
+    }
+    issues.push_back(oss.str());
+    std::cerr << "[kv-v1] " << oss.str() << '\n';
 }
 
-void LibrarySystem::pause() const {
-    std::cout << "\n請按 Enter 鍵繼續...";
-    std::string dummy;
-    std::getline(std::cin, dummy);
-}
-
-std::string LibrarySystem::getMaskedPassword() const {
-    std::string password;
-    char ch;
-#ifdef _WIN32
-    while ((ch = _getch()) != '\r' && ch != '\n') {
-        if (ch == '\b') { // Backspace
-            if (!password.empty()) {
-                password.pop_back();
-                std::cout << "\b \b";
-            }
-        } else if (ch == 0 || (unsigned char)ch == 224) { // Ignore special keys
-            _getch();
-        } else if (ch >= 32 && ch <= 126) {
-            password.push_back(ch);
-            std::cout << '*';
+bool atomicWriteTextFile(const std::string& targetPath, const std::string& content) {
+    std::string tempPath = targetPath + ".tmp";
+    {
+        std::ofstream out(tempPath, std::ios::trunc);
+        if (!out.is_open()) {
+            return false;
+        }
+        out << content;
+        if (!out.good()) {
+            return false;
         }
     }
-    std::cout << std::endl;
-#else
-    // POSIX terminal masking (Linux / macOS)
-    struct termios oldt, newt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-    newt.c_lflag &= ~(ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    
-    std::getline(std::cin, password);
-    
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-    std::cout << std::endl;
-#endif
-    return password;
+
+    std::remove(targetPath.c_str());
+    return std::rename(tempPath.c_str(), targetPath.c_str()) == 0;
 }
 
-int LibrarySystem::getMenuSelection(const std::vector<std::string>& options, const std::string& title) const {
-    if (options.empty()) return -1;
-    int selected = 0;
-    while (true) {
-        clearScreen();
-        std::cout << title << "\n";
-        
-        for (size_t i = 0; i < options.size(); ++i) {
-            if (static_cast<int>(i) == selected) {
-                // Highlight option with reverse video ANSI 7m
-                std::cout << "\033[7m  ➔ " << options[i] << "  \033[0m\n";
-            } else {
-                std::cout << "     " << options[i] << "\n";
-            }
+class PersistenceRepository {
+public:
+    bool load(std::vector<std::shared_ptr<MediaItem>>& inventory,
+              std::vector<std::shared_ptr<Account>>& accounts,
+              std::vector<RentalRecord>& allRecords) const;
+
+    bool save(const std::vector<std::shared_ptr<MediaItem>>& inventory,
+              const std::vector<std::shared_ptr<Account>>& accounts,
+              const std::vector<RentalRecord>& allRecords) const;
+
+private:
+    struct ParseContext {
+        std::vector<std::string> issues;
+    };
+
+    static bool validateHeader(std::ifstream& in, const std::string& filePath, ParseContext& context);
+    static bool hasRequiredKeys(const FieldMap& fields,
+                                const std::vector<std::string>& required,
+                                const std::string& filePath,
+                                std::size_t lineNumber,
+                                const std::string& rawLine,
+                                ParseContext& context);
+    static bool writeTextFile(const std::string& targetPath, const std::string& content);
+    static bool restoreFromBackup(const std::string& targetPath, const std::string& backupPath);
+    static bool backupFile(const std::string& sourcePath, const std::string& backupPath);
+};
+
+bool PersistenceRepository::validateHeader(std::ifstream& in,
+                                           const std::string& filePath,
+                                           ParseContext& context) {
+    std::string header;
+    std::size_t lineNumber = 0;
+    while (std::getline(in, header)) {
+        ++lineNumber;
+        header = trimCopy(header);
+        if (header.empty()) {
+            continue;
         }
-        std::cout << "\n===============================================\n";
-        std::cout << "(提示: 請使用 ⌨️ 上下鍵 [↑][↓] 移動，按下 [Enter] 確認選擇)\n";
-        
-#ifdef _WIN32
-        char ch = _getch();
-        if ((unsigned char)ch == 224 || ch == 0) { // Special keys prefix
-            char arrow = _getch();
-            if (arrow == 72) {      // Up arrow
-                selected = (selected - 1 + options.size()) % options.size();
-            } else if (arrow == 80) { // Down arrow
-                selected = (selected + 1) % options.size();
-            }
-        } else if (ch == 13 || ch == 10) { // Enter key
-            break;
+        if (header == kKvV1Header) {
+            return true;
         }
-#else
-        // POSIX keyboard arrow key intercept fallback using standard terminal modes
-        struct termios oldt, newt;
-        tcgetattr(STDIN_FILENO, &oldt);
-        newt = oldt;
-        newt.c_lflag &= ~(ICANON | ECHO);
-        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-        
-        char ch;
-        int n = read(STDIN_FILENO, &ch, 1);
-        if (n > 0) {
-            if (ch == 27) { // Escape sequence for arrow keys
-                char seq[2];
-                if (read(STDIN_FILENO, &seq[0], 1) > 0 && read(STDIN_FILENO, &seq[1], 1) > 0) {
-                    if (seq[0] == '[') {
-                        if (seq[1] == 'A') { // Up arrow
-                            selected = (selected - 1 + options.size()) % options.size();
-                        } else if (seq[1] == 'B') { // Down arrow
-                            selected = (selected + 1) % options.size();
-                        }
-                    }
-                }
-            } else if (ch == 10 || ch == 13) { // Enter key
-                tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-                break;
-            }
-        }
-        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-#endif
+        reportParseIssue(context.issues, filePath, lineNumber,
+                         "invalid or missing kv-v1 header", header);
+        return false;
     }
-    return selected;
+    reportParseIssue(context.issues, filePath, 0, "missing kv-v1 header", std::string());
+    return false;
 }
 
+bool PersistenceRepository::hasRequiredKeys(const FieldMap& fields,
+                                            const std::vector<std::string>& required,
+                                            const std::string& filePath,
+                                            std::size_t lineNumber,
+                                            const std::string& rawLine,
+                                            ParseContext& context) {
+    for (const auto& key : required) {
+        auto it = fields.find(key);
+        if (it == fields.end() || trimCopy(it->second).empty()) {
+            reportParseIssue(context.issues, filePath, lineNumber,
+                             "missing required key: " + key, rawLine);
+            return false;
+        }
+    }
+    return true;
+}
 
+bool PersistenceRepository::writeTextFile(const std::string& targetPath, const std::string& content) {
+    return atomicWriteTextFile(targetPath, content);
+}
 
+bool PersistenceRepository::backupFile(const std::string& sourcePath, const std::string& backupPath) {
+    std::ifstream in(sourcePath, std::ios::binary);
+    if (!in.is_open()) {
+        return false;
+    }
+    std::ofstream out(backupPath, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+    out << in.rdbuf();
+    return out.good();
+}
 
-// core: Load all databases from files
-bool LibrarySystem::loadData() {
+bool PersistenceRepository::restoreFromBackup(const std::string& targetPath, const std::string& backupPath) {
+    std::ifstream in(backupPath, std::ios::binary);
+    if (!in.is_open()) {
+        return false;
+    }
+    std::ofstream out(targetPath, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        return false;
+    }
+    out << in.rdbuf();
+    return out.good();
+}
+
+bool PersistenceRepository::load(std::vector<std::shared_ptr<MediaItem>>& inventory,
+                                 std::vector<std::shared_ptr<Account>>& accounts,
+                                 std::vector<RentalRecord>& allRecords) const {
     inventory.clear();
     accounts.clear();
     allRecords.clear();
 
-    // 1. Load Inventory
     std::ifstream invFile("data/inventory.txt");
-    if (invFile.is_open()) {
-        std::string line;
-        while (std::getline(invFile, line)) {
-            line = trim(line);
-            if (line.empty() || line[0] == '#') continue;
-            auto fields = split(line, ',');
-            if (fields.size() < 4) continue;
-
-            std::string type = fields[0];
-            std::string id = fields[1];
-            std::string title = fields[2];
-            bool isBorrowed = (fields[3] == "1");
-
-            std::string status = "ACTIVE";
-            if (fields.size() >= 7) {
-                status = fields[6];
-            }
-
-            if (type == "BOOK" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Book>(id, title, isBorrowed, fields[4], fields[5], status));
-            } else if (type == "DVD" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Dvd>(id, title, isBorrowed, fields[4], std::stoi(fields[5]), status));
-            } else if (type == "MAGAZINE" && fields.size() >= 6) {
-                inventory.push_back(std::make_shared<Magazine>(id, title, isBorrowed, std::stoi(fields[4]), std::stoi(fields[5]), status));
-            }
-        }
-        invFile.close();
+    std::ifstream accFile("data/accounts.txt");
+    std::ifstream recFile("data/rental_records.txt");
+    if (!invFile.is_open() || !accFile.is_open() || !recFile.is_open()) {
+        return false;
     }
 
+    ParseContext context;
+    if (!validateHeader(invFile, "data/inventory.txt", context) ||
+        !validateHeader(accFile, "data/accounts.txt", context) ||
+        !validateHeader(recFile, "data/rental_records.txt", context)) {
+        return false;
+    }
 
-    // 2. Load Accounts
-    std::ifstream accFile("data/accounts.txt");
-    if (accFile.is_open()) {
-        std::string line;
-        while (std::getline(accFile, line)) {
-            line = trim(line);
-            if (line.empty() || line[0] == '#') continue;
-            auto fields = split(line, ',');
-            if (fields.size() < 3) continue;
+    auto getField = [](const FieldMap& fields, const std::string& key) -> std::string {
+        auto it = fields.find(key);
+        return it == fields.end() ? std::string() : it->second;
+    };
 
-            std::string username = fields[0];
-            std::string password = fields[1];
-            std::string role = fields[2];
+    std::string line;
+    std::size_t invLine = 1;
+    while (std::getline(invFile, line)) {
+        ++invLine;
+        line = trimCopy(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
 
-            if (role == "ADMIN" && fields.size() >= 4) {
-                int level = std::stoi(fields[3]);
-                accounts.push_back(std::make_shared<Admin>(username, password, level));
-            } else if (role == "USER") {
-                auto user = std::make_shared<User>(username, password);
-                if (fields.size() >= 4 && !fields[3].empty()) {
-                    auto borrowed = split(fields[3], ';');
-                    for (const auto& item : borrowed) {
-                        if (!trim(item).empty()) {
-                            user->addBorrowedId(trim(item));
-                        }
+        FieldMap fields;
+        if (!parseKvLine(line, fields)) {
+            reportParseIssue(context.issues, "data/inventory.txt", invLine, "invalid kv line", line);
+            continue;
+        }
+
+        if (!hasRequiredKeys(fields, {"type", "id", "title", "borrowed", "status"},
+                             "data/inventory.txt", invLine, line, context)) {
+            continue;
+        }
+
+        std::string type = getField(fields, "type");
+        std::string id = getField(fields, "id");
+        std::string title = getField(fields, "title");
+        bool borrowed = getField(fields, "borrowed") == "1";
+        std::string status = getField(fields, "status");
+        if (status.empty()) {
+            status = "ACTIVE";
+        }
+
+        if (type == "BOOK") {
+            if (!hasRequiredKeys(fields, {"author", "isbn"}, "data/inventory.txt", invLine, line, context)) {
+                continue;
+            }
+            inventory.push_back(std::make_shared<Book>(
+                id, title, borrowed, getField(fields, "author"), getField(fields, "isbn"), status));
+        } else if (type == "DVD") {
+            if (!hasRequiredKeys(fields, {"director", "duration"}, "data/inventory.txt", invLine, line, context)) {
+                continue;
+            }
+            int duration = 0;
+            try {
+                duration = std::stoi(getField(fields, "duration"));
+            } catch (...) {
+                reportParseIssue(context.issues, "data/inventory.txt", invLine, "invalid duration", line);
+                duration = 0;
+            }
+            inventory.push_back(std::make_shared<Dvd>(
+                id, title, borrowed, getField(fields, "director"), duration, status));
+        } else if (type == "MAGAZINE") {
+            if (!hasRequiredKeys(fields, {"issue", "month"}, "data/inventory.txt", invLine, line, context)) {
+                continue;
+            }
+            int issue = 0;
+            int month = 0;
+            try {
+                issue = std::stoi(getField(fields, "issue"));
+            } catch (...) {
+                reportParseIssue(context.issues, "data/inventory.txt", invLine, "invalid issue", line);
+                issue = 0;
+            }
+            try {
+                month = std::stoi(getField(fields, "month"));
+            } catch (...) {
+                reportParseIssue(context.issues, "data/inventory.txt", invLine, "invalid month", line);
+                month = 0;
+            }
+            inventory.push_back(std::make_shared<Magazine>(
+                id, title, borrowed, issue, month, status));
+        } else {
+            reportParseIssue(context.issues, "data/inventory.txt", invLine, "unknown media type", line);
+        }
+    }
+
+    std::size_t accLine = 1;
+    while (std::getline(accFile, line)) {
+        ++accLine;
+        line = trimCopy(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        FieldMap fields;
+        if (!parseKvLine(line, fields)) {
+            reportParseIssue(context.issues, "data/accounts.txt", accLine, "invalid kv line", line);
+            continue;
+        }
+
+        if (!hasRequiredKeys(fields, {"username", "role", "passwordHash", "passwordSalt"},
+                             "data/accounts.txt", accLine, line, context)) {
+            continue;
+        }
+
+        std::string username = getField(fields, "username");
+        std::string role = getField(fields, "role");
+        std::string hash = getField(fields, "passwordHash");
+        std::string salt = getField(fields, "passwordSalt");
+        std::string borrowedField = getField(fields, "borrowed");
+
+        if (role == "ADMIN") {
+            if (!hasRequiredKeys(fields, {"adminLevel"}, "data/accounts.txt", accLine, line, context)) {
+                continue;
+            }
+            int adminLevel = 1;
+            try {
+                adminLevel = std::stoi(getField(fields, "adminLevel"));
+            } catch (...) {
+                reportParseIssue(context.issues, "data/accounts.txt", accLine, "invalid adminLevel", line);
+                adminLevel = 1;
+            }
+            accounts.push_back(std::make_shared<Admin>(username, hash, adminLevel, true, salt));
+        } else {
+            auto user = std::make_shared<User>(username, hash, true, salt);
+            if (!borrowedField.empty()) {
+                for (const auto& id : splitByChar(borrowedField, ';')) {
+                    if (!trimCopy(id).empty()) {
+                        user->addBorrowedId(trimCopy(id));
                     }
                 }
-                accounts.push_back(user);
             }
+            accounts.push_back(user);
         }
-        accFile.close();
     }
 
-    // 3. Load Rental Records
-    std::ifstream recFile("data/rental_records.txt");
-    if (recFile.is_open()) {
-        std::string line;
-        while (std::getline(recFile, line)) {
-            line = trim(line);
-            if (line.empty() || line[0] == '#') continue;
-            auto fields = split(line, ',');
-            if (fields.size() < 8) continue;
-
-            RentalRecord rec;
-            rec.recordId = fields[0];
-            rec.username = fields[1];
-            rec.itemId = fields[2];
-            rec.itemTitle = fields[3];
-            rec.borrowDate = fields[4];
-            rec.returnDate = fields[5];
-            rec.rentalFee = std::stod(fields[6]);
-            rec.status = fields[7];
-
-            allRecords.push_back(rec);
+    std::size_t recLine = 1;
+    while (std::getline(recFile, line)) {
+        ++recLine;
+        line = trimCopy(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
         }
-        recFile.close();
+
+        FieldMap fields;
+        if (!parseKvLine(line, fields)) {
+            reportParseIssue(context.issues, "data/rental_records.txt", recLine, "invalid kv line", line);
+            continue;
+        }
+
+        if (!hasRequiredKeys(fields,
+                             {"recordId", "username", "itemId", "itemTitle", "borrowDate", "returnDate", "rentalFee", "status"},
+                             "data/rental_records.txt", recLine, line, context)) {
+            continue;
+        }
+
+        RentalRecord rec;
+        rec.recordId = getField(fields, "recordId");
+        rec.username = getField(fields, "username");
+        rec.itemId = getField(fields, "itemId");
+        rec.itemTitle = getField(fields, "itemTitle");
+        rec.borrowDate = getField(fields, "borrowDate");
+        rec.returnDate = getField(fields, "returnDate");
+        try {
+            rec.rentalFee = std::stod(getField(fields, "rentalFee"));
+        } catch (...) {
+            reportParseIssue(context.issues, "data/rental_records.txt", recLine, "invalid rentalFee", line);
+            rec.rentalFee = 0.0;
+        }
+        rec.status = getField(fields, "status");
+        allRecords.push_back(rec);
+    }
+
+    for (const auto& acc : accounts) {
+        if (acc->getRole() != "USER") {
+            continue;
+        }
+        auto user = std::dynamic_pointer_cast<User>(acc);
+        if (user == nullptr) {
+            continue;
+        }
+        for (const auto& id : user->getBorrowedIds()) {
+            for (const auto& item : inventory) {
+                if (item->getId() == id) {
+                    item->setBorrowed(true);
+                    break;
+                }
+            }
+        }
     }
 
     return true;
 }
 
-// core: Save all databases to files
-void LibrarySystem::saveData() {
-    // 1. Save Inventory
-    std::ofstream invFile("data/inventory.txt");
-    if (invFile.is_open()) {
-        for (const auto& item : inventory) {
-            invFile << item->serialize() << "\n";
+bool PersistenceRepository::save(const std::vector<std::shared_ptr<MediaItem>>& inventory,
+                                 const std::vector<std::shared_ptr<Account>>& accounts,
+                                 const std::vector<RentalRecord>& allRecords) const {
+    std::ostringstream invOut;
+    invOut << kKvV1Header << "\n";
+    for (const auto& item : inventory) {
+        if (auto book = std::dynamic_pointer_cast<Book>(item)) {
+            invOut << "type=BOOK|id=" << escapeValue(book->getId())
+                   << "|title=" << escapeValue(book->getTitle())
+                   << "|borrowed=" << (book->isBorrowedItem() ? 1 : 0)
+                   << "|author=" << escapeValue(book->getAuthor())
+                   << "|isbn=" << escapeValue(book->getIsbn())
+                   << "|status=" << escapeValue(book->getStatus()) << "\n";
+        } else if (auto dvd = std::dynamic_pointer_cast<Dvd>(item)) {
+            invOut << "type=DVD|id=" << escapeValue(dvd->getId())
+                   << "|title=" << escapeValue(dvd->getTitle())
+                   << "|borrowed=" << (dvd->isBorrowedItem() ? 1 : 0)
+                   << "|director=" << escapeValue(dvd->getDirector())
+                   << "|duration=" << dvd->getDuration()
+                   << "|status=" << escapeValue(dvd->getStatus()) << "\n";
+        } else if (auto mag = std::dynamic_pointer_cast<Magazine>(item)) {
+            invOut << "type=MAGAZINE|id=" << escapeValue(mag->getId())
+                   << "|title=" << escapeValue(mag->getTitle())
+                   << "|borrowed=" << (mag->isBorrowedItem() ? 1 : 0)
+                   << "|issue=" << mag->getIssueNum()
+                   << "|month=" << mag->getMonth()
+                   << "|status=" << escapeValue(mag->getStatus()) << "\n";
         }
-        invFile.close();
     }
 
-    // 2. Save Accounts
-    std::ofstream accFile("data/accounts.txt");
-    if (accFile.is_open()) {
-        for (const auto& acc : accounts) {
-            accFile << acc->getUsername() << "," << acc->getPassword() << "," << acc->getRole();
-            if (acc->getRole() == "ADMIN") {
-                auto admin = std::dynamic_pointer_cast<Admin>(acc);
-                accFile << "," << admin->getAdminLevel() << "\n";
-            } else {
-                auto user = std::dynamic_pointer_cast<User>(acc);
-                accFile << ",";
+    std::ostringstream accOut;
+    accOut << kKvV1Header << "\n";
+    for (const auto& acc : accounts) {
+        accOut << "username=" << escapeValue(acc->getUsername())
+               << "|role=" << escapeValue(acc->getRole())
+               << "|passwordHash=" << escapeValue(acc->getPasswordHash())
+               << "|passwordSalt=" << escapeValue(acc->getPasswordSalt());
+        if (acc->getRole() == "ADMIN") {
+            auto admin = std::dynamic_pointer_cast<Admin>(acc);
+            accOut << "|adminLevel=" << (admin != nullptr ? admin->getAdminLevel() : 1);
+        } else {
+            auto user = std::dynamic_pointer_cast<User>(acc);
+            accOut << "|borrowed=";
+            if (user != nullptr) {
                 const auto& borrowed = user->getBorrowedIds();
                 for (size_t i = 0; i < borrowed.size(); ++i) {
-                    accFile << borrowed[i];
-                    if (i < borrowed.size() - 1) accFile << ";";
+                    if (i > 0) {
+                        accOut << ';';
+                    }
+                    accOut << escapeValue(borrowed[i]);
                 }
-                accFile << "\n";
             }
         }
-        accFile.close();
+        accOut << "\n";
     }
 
-    // 3. Save Rental Records
-    std::ofstream recFile("data/rental_records.txt");
-    if (recFile.is_open()) {
-        for (const auto& rec : allRecords) {
-            recFile << rec.recordId << "," << rec.username << "," << rec.itemId << ","
-                    << rec.itemTitle << "," << rec.borrowDate << "," << rec.returnDate << ","
-                    << std::fixed << std::setprecision(1) << rec.rentalFee << "," << rec.status << "\n";
-        }
-        recFile.close();
+    std::ostringstream recOut;
+    recOut << kKvV1Header << "\n";
+    for (const auto& rec : allRecords) {
+        recOut << "recordId=" << escapeValue(rec.recordId)
+               << "|username=" << escapeValue(rec.username)
+               << "|itemId=" << escapeValue(rec.itemId)
+               << "|itemTitle=" << escapeValue(rec.itemTitle)
+               << "|borrowDate=" << escapeValue(rec.borrowDate)
+               << "|returnDate=" << escapeValue(rec.returnDate)
+               << "|rentalFee=" << rec.rentalFee
+               << "|status=" << escapeValue(rec.status) << "\n";
     }
+
+    const std::string invPath = "data/inventory.txt";
+    const std::string accPath = "data/accounts.txt";
+    const std::string recPath = "data/rental_records.txt";
+    const std::string invBak = invPath + ".bak";
+    const std::string accBak = accPath + ".bak";
+    const std::string recBak = recPath + ".bak";
+
+    bool invBacked = backupFile(invPath, invBak);
+    backupFile(accPath, accBak);
+    bool recBacked = backupFile(recPath, recBak);
+
+    bool invSaved = writeTextFile(invPath, invOut.str());
+    bool accSaved = invSaved && writeTextFile(accPath, accOut.str());
+    bool recSaved = accSaved && writeTextFile(recPath, recOut.str());
+
+    if (!recSaved) {
+        if (!invSaved && invBacked) {
+            restoreFromBackup(invPath, invBak);
+        }
+        if (invSaved && !accSaved && invBacked) {
+            restoreFromBackup(invPath, invBak);
+        }
+        if (accSaved && recBacked) {
+            restoreFromBackup(accPath, accBak);
+            if (invBacked) {
+                restoreFromBackup(invPath, invBak);
+            }
+        }
+        if (recBacked) {
+            restoreFromBackup(recPath, recBak);
+        }
+    }
+
+    std::remove(invBak.c_str());
+    std::remove(accBak.c_str());
+    std::remove(recBak.c_str());
+
+    return invSaved && accSaved && recSaved;
 }
 
-// core: Authentication logic
-bool LibrarySystem::processLogin(const std::string& username, const std::string& password) {
-    for (const auto& acc : accounts) {
-        if (acc->getUsername() == username && acc->checkPassword(password)) {
-            currentUser = acc;
-            return true;
-        }
-    }
-    return false;
+} // namespace
+
+LibrarySystem::LibrarySystem() : currentUser(nullptr) {
+    MenuRenderer::initialize();
 }
 
-bool LibrarySystem::processRegister(const std::string& username, const std::string& password) {
-    for (const auto& acc : accounts) {
-        if (acc->getUsername() == username) {
-            return false; // Username already exists
-        }
+std::vector<std::string> LibrarySystem::split(const std::string& str, char delimiter) const {
+    return splitByChar(str, delimiter);
+}
+
+std::string LibrarySystem::trim(const std::string& str) const {
+    return trimCopy(str);
+}
+
+std::string LibrarySystem::getTodayDateStr() const {
+    std::time_t now = std::time(nullptr);
+    std::tm localTime{};
+    if (std::tm* localTimePtr = std::localtime(&now)) {
+        localTime = *localTimePtr;
     }
-    accounts.push_back(std::make_shared<User>(username, password));
-    saveData();
-    return true;
+    std::ostringstream oss;
+    oss << std::put_time(&localTime, "%Y-%m-%d");
+    return oss.str();
+}
+
+int LibrarySystem::calculateDaysBetween(const std::string& date1, const std::string& date2) const {
+    auto parseDate = [](const std::string& date) -> std::time_t {
+        std::tm tm{};
+        std::istringstream iss(date);
+        iss >> std::get_time(&tm, "%Y-%m-%d");
+        if (iss.fail()) {
+            return static_cast<std::time_t>(0);
+        }
+        tm.tm_isdst = -1;
+        return std::mktime(&tm);
+    };
+
+    std::time_t t1 = parseDate(date1);
+    std::time_t t2 = parseDate(date2);
+    if (t1 == 0 || t2 == 0) {
+        return 0;
+    }
+    double diff = std::difftime(t2, t1) / (60.0 * 60.0 * 24.0);
+    return diff > 0 ? static_cast<int>(diff) : 0;
+}
+
+void LibrarySystem::clearScreen() const {
+    MenuRenderer::clearScreen();
+}
+
+void LibrarySystem::pause() const {
+    MenuRenderer::pause();
+}
+
+std::string LibrarySystem::getMaskedPassword() const {
+    return MenuRenderer::getMaskedPassword();
+}
+
+int LibrarySystem::getMenuSelection(const std::vector<std::string>& options, const std::string& title) const {
+    return MenuRenderer::getMenuSelection(options, title);
 }
 
 void LibrarySystem::processLogout() {
     currentUser = nullptr;
 }
 
-// core: Main Execution Loop
 void LibrarySystem::run() {
-    loadData();
+    if (!loadData()) {
+        std::cout << "\n❌ 系統啟動失敗：資料格式不符合 kv-v1 要求。\n";
+        return;
+    }
+
     while (true) {
         if (currentUser == nullptr) {
             std::vector<std::string> options = {
@@ -380,17 +678,17 @@ void LibrarySystem::run() {
                                 "===============================================\n"
                                 "請選擇操作項目:";
             int selection = getMenuSelection(options, title);
-            
+
             if (selection == 0) {
                 std::cout << "請輸入帳號: ";
                 std::string user;
                 std::getline(std::cin, user);
                 user = trim(user);
-                
+
                 std::cout << "請輸入密碼: ";
                 std::string pass = getMaskedPassword();
                 pass = trim(pass);
-                
+
                 if (processLogin(user, pass)) {
                     std::cout << "\n登入成功！歡迎回到系統。\n";
                     pause();
@@ -403,15 +701,15 @@ void LibrarySystem::run() {
                 std::string user;
                 std::getline(std::cin, user);
                 user = trim(user);
-                
+
                 std::cout << "請設定新密碼: ";
                 std::string pass = getMaskedPassword();
                 pass = trim(pass);
-                
+
                 if (processRegister(user, pass)) {
                     std::cout << "\n註冊成功！您現在可以進行登入了。\n";
                 } else {
-                    std::cout << "\n❌ 註冊失敗：此帳號已存在。\n";
+                    std::cout << "\n❌ 註冊失敗：帳號已存在或輸入不合法。\n";
                 }
 
                 pause();
@@ -420,718 +718,45 @@ void LibrarySystem::run() {
                 break;
             }
         } else {
-            // Polymorphic dispatch to roles
             currentUser->showMenu(*this);
         }
     }
 }
 
-// UI: User Menu Loop
-void LibrarySystem::runUserMenu() {
-    std::vector<std::string> options = {
-        "瀏覽所有館藏 (圖書/DVD/雜誌)",
-        "搜尋館藏 (按關鍵字/類型)",
-        "借閱多媒體 (輸入 ID)",
-        "歸還多媒體 (輸入 ID)",
-        "查看我的借閱紀錄 & 應付租金",
-        "登出系統"
-    };
-    std::string title = "\n===============================================\n"
-                        "   【使用者控制台】 歡迎, " + currentUser->getUsername() + "! (一般會員)\n"
-                        "===============================================\n"
-                        "請選擇操作項目:";
-    int selection = getMenuSelection(options, title);
+bool LibrarySystem::loadData() {
+    PersistenceRepository repository;
+    if (!repository.load(inventory, accounts, allRecords)) {
+        std::cout << "\n❌ 資料載入失敗：檔案缺失、標頭錯誤或內容損毀。\n";
+        return false;
+    }
+    return true;
+}
 
-    if (selection == 0) {
-        showInventory();
-    } else if (selection == 1) {
-        searchInventory();
-    } else if (selection == 2) {
-        executeBorrow();
-    } else if (selection == 3) {
-        executeReturn();
-    } else if (selection == 4) {
-        showUserRentalHistory();
-    } else if (selection == 5) {
-        processLogout();
-        std::cout << "\n已成功登出系統。\n";
-        pause();
+void LibrarySystem::saveData() {
+    PersistenceRepository repository;
+    if (!repository.save(inventory, accounts, allRecords)) {
+        std::cout << "\n❌ 儲存失敗：無法寫入資料檔。\n";
     }
 }
 
-// UI: Admin Menu Loop
-void LibrarySystem::runAdminMenu() {
-    std::vector<std::string> options = {
-        "新增多媒體館藏 (圖書/DVD/雜誌)",
-        "下架/刪除多媒體館藏",
-        "查看所有使用者名單 & 借閱狀態",
-        "檢視全館租借交易日誌 (Rental Log)",
-        "資源回收桶與封存管理中心",
-        "登出系統"
-    };
-    std::string title = "\n===============================================\n"
-                        "      【管理者主控台】 歡迎, " + currentUser->getUsername() + "! (系統管理員)\n"
-                        "===============================================\n"
-                        "請選擇操作項目:";
-    int selection = getMenuSelection(options, title);
-
-    if (selection == 0) {
-        adminAddMedia();
-    } else if (selection == 1) {
-        adminRemoveMedia();
-    } else if (selection == 2) {
-        adminViewAllAccounts();
-    } else if (selection == 3) {
-        adminViewAllRecords();
-    } else if (selection == 4) {
-        adminRecycleBinMenu();
-    } else if (selection == 5) {
-        processLogout();
-        std::cout << "\n已成功登出系統。\n";
-        pause();
+bool LibrarySystem::processLogin(const std::string& username, const std::string& password) {
+    auto matched = LibraryService::authenticate(accounts, username, password);
+    if (matched != nullptr) {
+        currentUser = matched;
+        return true;
     }
+    return false;
 }
 
-
-// User Action: Display all library inventory
-void LibrarySystem::showInventory() const {
-    if (inventory.empty()) {
-        std::cout << "\n目前圖書館沒有任何館藏庫存。\n";
-        pause();
-        return;
-    }
-    
-    // Check if there is any visible item for regular users
-    bool hasVisible = false;
-    for (const auto& item : inventory) {
-        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
-            continue;
-        }
-        hasVisible = true;
-        break;
-    }
-    if (!hasVisible) {
-        std::cout << "\n目前圖書館沒有任何館藏庫存。\n";
-        pause();
-        return;
+bool LibrarySystem::processRegister(const std::string& username, const std::string& password) {
+    if (!LibraryService::canRegister(accounts, username, password)) {
+        return false;
     }
 
-    std::cout << "\n----------------------- 圖書館館藏列表 -----------------------\n";
-    std::cout << std::left << std::setw(8) << "ID" << std::setw(25) << "名稱" << std::setw(10) << "類別" << std::setw(10) << "狀態" << "詳細資料\n";
-    std::cout << "------------------------------------------------------------\n";
-    for (const auto& item : inventory) {
-        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
-            continue;
-        }
-        std::string type = "未知";
-        std::string details = "";
-        
-        if (std::dynamic_pointer_cast<Book>(item)) {
-            type = "圖書 (Book)";
-            auto book = std::dynamic_pointer_cast<Book>(item);
-            details = "作者: " + book->getAuthor() + " | ISBN: " + book->getIsbn();
-        } else if (std::dynamic_pointer_cast<Dvd>(item)) {
-            type = "影音 (DVD)";
-            auto dvd = std::dynamic_pointer_cast<Dvd>(item);
-            details = "導演: " + dvd->getDirector() + " | 片長: " + std::to_string(dvd->getDuration()) + " 分鐘";
-        } else if (std::dynamic_pointer_cast<Magazine>(item)) {
-            type = "期刊 (Mag)";
-            auto mag = std::dynamic_pointer_cast<Magazine>(item);
-            details = "期號: " + std::to_string(mag->getIssueNum()) + " | 出版月份: " + std::to_string(mag->getMonth()) + "月";
-        }
-
-        std::cout << std::left << std::setw(8) << item->getId()
-                  << std::setw(25) << (item->getTitle().length() > 22 ? item->getTitle().substr(0, 20) + ".." : item->getTitle())
-                  << std::setw(10) << type
-                  << std::setw(10) << (item->isBorrowedItem() ? "❌已借出" : "✅在庫")
-                  << details << "\n";
-    }
-    std::cout << "------------------------------------------------------------\n";
-    pause();
-}
-
-
-// User Action: Search media items
-void LibrarySystem::searchInventory() const {
-    std::cout << "請輸入搜尋關鍵字 (品名/作者/導演/類別): ";
-    std::string query;
-    std::getline(std::cin, query);
-    query = trim(query);
-    if (query.empty()) return;
-
-    // Convert query to lower case
-    std::string queryLower = query;
-    std::transform(queryLower.begin(), queryLower.end(), queryLower.begin(), ::tolower);
-
-    std::cout << "\n----------------------- 搜尋結果 -----------------------\n";
-    bool found = false;
-    for (const auto& item : inventory) {
-        if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
-            continue;
-        }
-        std::string titleLower = item->getTitle();
-        std::transform(titleLower.begin(), titleLower.end(), titleLower.begin(), ::tolower);
-
-        bool match = (titleLower.find(queryLower) != std::string::npos || item->getId() == query);
-        
-        std::string type = "";
-        std::string details = "";
-        if (std::dynamic_pointer_cast<Book>(item)) {
-            type = "BOOK";
-            auto book = std::dynamic_pointer_cast<Book>(item);
-            std::string authorLower = book->getAuthor();
-            std::transform(authorLower.begin(), authorLower.end(), authorLower.begin(), ::tolower);
-            if (authorLower.find(queryLower) != std::string::npos) match = true;
-            details = "作者: " + book->getAuthor() + " | ISBN: " + book->getIsbn();
-        } else if (std::dynamic_pointer_cast<Dvd>(item)) {
-            type = "DVD";
-            auto dvd = std::dynamic_pointer_cast<Dvd>(item);
-            std::string dirLower = dvd->getDirector();
-            std::transform(dirLower.begin(), dirLower.end(), dirLower.begin(), ::tolower);
-            if (dirLower.find(queryLower) != std::string::npos) match = true;
-            details = "導演: " + dvd->getDirector() + " | 片長: " + std::to_string(dvd->getDuration()) + " 分鐘";
-        } else if (std::dynamic_pointer_cast<Magazine>(item)) {
-            type = "MAGAZINE";
-            auto mag = std::dynamic_pointer_cast<Magazine>(item);
-            details = "期號: " + std::to_string(mag->getIssueNum()) + " | 出版月份: " + std::to_string(mag->getMonth()) + "月";
-        }
-
-        std::string typeLower = type;
-        std::transform(typeLower.begin(), typeLower.end(), typeLower.begin(), ::tolower);
-        if (typeLower == queryLower) match = true;
-
-        if (match) {
-            found = true;
-            std::cout << "[" << type << "] ID: " << item->getId() << " | 《" << item->getTitle() << "》 - " 
-                      << (item->isBorrowedItem() ? "❌已借出" : "✅在庫") << " | " << details << "\n";
-        }
-    }
-    if (!found) {
-        std::cout << "無匹配的搜尋結果。\n";
-    }
-    std::cout << "--------------------------------------------------------\n";
-    pause();
-}
-
-
-// User Action: Borrow item
-void LibrarySystem::executeBorrow() {
-    std::cout << "請輸入欲借閱的館藏 ID: ";
-    std::string id;
-    std::getline(std::cin, id);
-    id = trim(id);
-
-    // Find the item
-    std::shared_ptr<MediaItem> target = nullptr;
-    for (const auto& item : inventory) {
-        if (item->getId() == id) {
-            if (currentUser != nullptr && currentUser->getRole() == "USER" && item->getStatus() != "ACTIVE") {
-                continue;
-            }
-            target = item;
-            break;
-        }
-    }
-
-    if (target == nullptr) {
-        std::cout << "\n❌ 錯誤：找不到該館藏 ID。\n";
-        pause();
-        return;
-    }
-
-    if (target->isBorrowedItem()) {
-        std::cout << "\n❌ 錯誤：該多媒體已被他人借出中。\n";
-        pause();
-        return;
-    }
-
-    // Cast current user to User derived class
-    auto user = std::dynamic_pointer_cast<User>(currentUser);
-    if (user == nullptr) return;
-
-    // Perform borrow actions
-    target->setBorrowed(true);
-    user->addBorrowedId(id);
-
-    // Create a new RentalRecord
-    RentalRecord rec;
-    int nextIndex = 10001 + allRecords.size();
-    rec.recordId = "REC_" + std::to_string(nextIndex);
-    rec.username = currentUser->getUsername();
-    rec.itemId = id;
-    rec.itemTitle = target->getTitle();
-    rec.borrowDate = getTodayDateStr();
-    rec.returnDate = "Pending";
-    rec.rentalFee = 0.0;
-    rec.status = "BORROWED";
-
-    allRecords.push_back(rec);
+    accounts.push_back(std::make_shared<User>(username, password));
     saveData();
-
-    std::cout << "\n🎉 借閱成功！\n";
-    std::cout << "交易編號: " << rec.recordId << "\n";
-    std::cout << "借出項目: 《" << target->getTitle() << "》\n";
-    std::cout << "借出日期: " << rec.borrowDate << "\n";
-    pause();
+    return true;
 }
 
 
-// User Action: Return item
-void LibrarySystem::executeReturn() {
-    auto user = std::dynamic_pointer_cast<User>(currentUser);
-    if (user == nullptr) return;
-
-    const auto& borrowed = user->getBorrowedIds();
-    if (borrowed.empty()) {
-        std::cout << "\n您目前手頭沒有任何未歸還的借閱項目。\n";
-        pause();
-        return;
-    }
-
-    std::cout << "您手頭借用中的項目:\n";
-    for (const auto& id : borrowed) {
-        for (const auto& item : inventory) {
-            if (item->getId() == id) {
-                std::cout << "  - ID: " << id << " | 《" << item->getTitle() << "》\n";
-            }
-        }
-    }
-
-    std::cout << "請輸入欲歸還的館藏 ID: ";
-    std::string id;
-    std::getline(std::cin, id);
-    id = trim(id);
-
-    if (!user->removeBorrowedId(id)) {
-        std::cout << "\n❌ 錯誤：輸入的 ID 不在您的借閱清單中。\n";
-        pause();
-        return;
-    }
-
-    // Update MediaItem status
-    std::shared_ptr<MediaItem> target = nullptr;
-    for (const auto& item : inventory) {
-        if (item->getId() == id) {
-            target = item;
-            break;
-        }
-    }
-    if (target != nullptr) {
-        target->setBorrowed(false);
-    }
-
-    // Find the active RentalRecord and close it
-    double calculatedFee = 0.0;
-    int durationDays = 0;
-    std::string today = getTodayDateStr();
-
-    for (auto& rec : allRecords) {
-        if (rec.username == currentUser->getUsername() && rec.itemId == id && rec.status == "BORROWED") {
-            rec.returnDate = today;
-            rec.status = "RETURNED";
-            
-            // Calculate rental fee using polymorphism!
-            durationDays = calculateDaysBetween(rec.borrowDate, today);
-            if (durationDays == 0) durationDays = 1; // Minimum 1 day rent fee
-            
-            if (target != nullptr) {
-                calculatedFee = target->getFee(durationDays);
-                rec.rentalFee = calculatedFee;
-            }
-            break;
-        }
-    }
-
-
-    saveData();
-
-    std::cout << "\n🎉 歸還成功！\n";
-    std::cout << "歸還項目: 《" << (target ? target->getTitle() : "未知") << "》\n";
-    std::cout << "借閱天數: " << durationDays << " 天\n";
-    std::cout << "應付租金/滯納金: NT$ " << calculatedFee << " 元\n";
-    pause();
-}
-
-
-// User Action: View rental records
-void LibrarySystem::showUserRentalHistory() const {
-    std::cout << "\n------------------- " << currentUser->getUsername() << " 的借閱歷史紀錄 -------------------\n";
-    bool found = false;
-    double unpaidTotal = 0.0;
-    
-    for (const auto& rec : allRecords) {
-        if (rec.username == currentUser->getUsername()) {
-            found = true;
-            std::cout << "紀錄ID: " << rec.recordId << " | 《" << rec.itemTitle << "》(" << rec.itemId << ")\n";
-            std::cout << "  - 借出日期: " << rec.borrowDate << " | 歸還日期: " << rec.returnDate << "\n";
-            std::cout << "  - 狀態: " << (rec.status == "BORROWED" ? "❌ 借用中 (未還)" : "✅ 已歸還") << "\n";
-            if (rec.status == "BORROWED") {
-                // Calculate simulated current pending fee
-                int days = calculateDaysBetween(rec.borrowDate, getTodayDateStr());
-                if (days == 0) days = 1;
-                
-                double fee = 0.0;
-                for (const auto& item : inventory) {
-                    if (item->getId() == rec.itemId) {
-                        fee = item->getFee(days);
-                        break;
-                    }
-                }
-                std::cout << "  - 當前累計租金: NT$ " << fee << " 元 (歸還時繳納)\n";
-                unpaidTotal += fee;
-            } else {
-                std::cout << "  - 繳納租金: NT$ " << rec.rentalFee << " 元\n";
-            }
-            std::cout << "  --------------------------------------------------------\n";
-        }
-    }
-    if (!found) {
-        std::cout << "查無任何歷史交易紀錄。\n";
-    } else {
-        std::cout << ">>> 未歸還項目當前估計應繳租金總計: NT$ " << unpaidTotal << " 元\n";
-    }
-    std::cout << "--------------------------------------------------------------------\n";
-    pause();
-}
-
-
-// Admin Action: Add new media item
-void LibrarySystem::adminAddMedia() {
-    std::cout << "請選擇新增的館藏類別:\n";
-    std::cout << "  1. 圖書 (Book)\n";
-    std::cout << "  2. 影音 (DVD)\n";
-    std::cout << "  3. 期刊 (Magazine)\n";
-    std::cout << "您的選擇 (1-3): ";
-    std::string typeChoice;
-    std::getline(std::cin, typeChoice);
-    typeChoice = trim(typeChoice);
-
-    if (typeChoice != "1" && typeChoice != "2" && typeChoice != "3") {
-        std::cout << "❌ 錯誤：無效的類別選取。\n";
-        pause();
-        return;
-    }
-
-    std::cout << "請輸入新館藏 ID: ";
-    std::string id;
-    std::getline(std::cin, id);
-    id = trim(id);
-
-    // Check duplicate ID
-    for (const auto& item : inventory) {
-        if (item->getId() == id) {
-            std::cout << "❌ 錯誤：ID 已存在，不可重複建立。\n";
-            pause();
-            return;
-        }
-    }
-
-    std::cout << "請輸入館藏名稱/標題: ";
-    std::string title;
-    std::getline(std::cin, title);
-    title = trim(title);
-
-    if (typeChoice == "1") {
-        std::cout << "請輸入作者: ";
-        std::string author;
-        std::getline(std::cin, author);
-        author = trim(author);
-
-        std::cout << "請輸入 ISBN: ";
-        std::string isbn;
-        std::getline(std::cin, isbn);
-        isbn = trim(isbn);
-
-        inventory.push_back(std::make_shared<Book>(id, title, false, author, isbn));
-    } else if (typeChoice == "2") {
-        std::cout << "請輸入導演: ";
-        std::string director;
-        std::getline(std::cin, director);
-        director = trim(director);
-
-        std::cout << "請輸入影片片長 (分鐘): ";
-        std::string durationStr;
-        std::getline(std::cin, durationStr);
-        int duration = std::stoi(trim(durationStr));
-
-        inventory.push_back(std::make_shared<Dvd>(id, title, false, director, duration));
-    } else if (typeChoice == "3") {
-        std::cout << "請輸入期刊期號: ";
-        std::string issueStr;
-        std::getline(std::cin, issueStr);
-        int issue = std::stoi(trim(issueStr));
-
-        std::cout << "請輸入期刊出版月份 (1-12): ";
-        std::string monthStr;
-        std::getline(std::cin, monthStr);
-        int month = std::stoi(trim(monthStr));
-
-        inventory.push_back(std::make_shared<Magazine>(id, title, false, issue, month));
-    }
-
-    saveData();
-    std::cout << "\n🎉 館藏上架新增成功！\n";
-    pause();
-}
-
-
-// Admin Action: Delete media item
-void LibrarySystem::adminRemoveMedia() {
-    std::vector<std::shared_ptr<MediaItem>> activeItems;
-    for (const auto& item : inventory) {
-        if (item->getStatus() == "ACTIVE") {
-            activeItems.push_back(item);
-        }
-    }
-
-    if (activeItems.empty()) {
-        std::cout << "\n目前沒有任何上架中的館藏庫存可供下架。\n";
-        pause();
-        return;
-    }
-
-    std::vector<std::string> options;
-    for (const auto& item : activeItems) {
-        std::string type = "未知";
-        if (std::dynamic_pointer_cast<Book>(item)) {
-            type = "圖書";
-        } else if (std::dynamic_pointer_cast<Dvd>(item)) {
-            type = "影音";
-        } else if (std::dynamic_pointer_cast<Magazine>(item)) {
-            type = "期刊";
-        }
-        std::string opt = "[" + type + "] ID: " + item->getId() + " - " + item->getTitle();
-        if (item->isBorrowedItem()) {
-            opt += " (⚠️借出中)";
-        }
-        options.push_back(opt);
-    }
-    options.push_back("返回管理者主控台");
-
-    std::string title = "\n===============================================\n"
-                        "            【下架/刪除多媒體館藏】            \n"
-                        "===============================================\n"
-                        "請選擇欲下架刪除的項目:";
-    int selection = getMenuSelection(options, title);
-
-    if (selection == static_cast<int>(activeItems.size())) {
-        return; // User cancelled
-    }
-
-    auto target = activeItems[selection];
-    std::string id = target->getId();
-
-    if (target->isBorrowedItem()) {
-        std::cout << "⚠️ 警告：該館藏目前處於借出狀態，下架將強制收回並結清租用紀錄。\n";
-        // Force remove from all users' borrowed lists
-        for (auto& acc : accounts) {
-            if (acc->getRole() == "USER") {
-                auto user = std::dynamic_pointer_cast<User>(acc);
-                user->removeBorrowedId(id);
-            }
-        }
-    }
-
-    target->setStatus("ARCHIVED");
-    saveData();
-
-    std::cout << "\n🎉 館藏 《" << target->getTitle() << "》 (ID: " << id << ") 已成功下架移至回收桶！\n";
-    pause();
-}
-
-
-// Admin Action: View all system user accounts
-void LibrarySystem::adminViewAllAccounts() const {
-    std::cout << "\n----------------------- 系統註冊帳戶列表 -----------------------\n";
-    std::cout << std::left << std::setw(15) << "帳號" << std::setw(10) << "密碼" << std::setw(10) << "角色" << "借閱明細 / 權限級別\n";
-    std::cout << "--------------------------------------------------------------\n";
-    for (const auto& acc : accounts) {
-        std::string extra = "";
-        if (acc->getRole() == "ADMIN") {
-            auto admin = std::dynamic_pointer_cast<Admin>(acc);
-            extra = "權限等級: " + std::to_string(admin->getAdminLevel());
-        } else {
-            auto user = std::dynamic_pointer_cast<User>(acc);
-            const auto& borrowed = user->getBorrowedIds();
-            if (borrowed.empty()) {
-                extra = "無借用中項目";
-            } else {
-                extra = "借用中: ";
-                for (size_t i = 0; i < borrowed.size(); ++i) {
-                    extra += borrowed[i];
-                    if (i < borrowed.size() - 1) extra += ", ";
-                }
-            }
-        }
-
-        std::cout << std::left << std::setw(15) << acc->getUsername()
-                  << std::setw(10) << acc->getPassword()
-                  << std::setw(10) << acc->getRole()
-                  << extra << "\n";
-    }
-    std::cout << "--------------------------------------------------------------\n";
-    pause();
-}
-
-
-// Admin Action: View all logs
-void LibrarySystem::adminViewAllRecords() const {
-    std::cout << "\n----------------------- 全系統借閱交易日誌 -----------------------\n";
-    if (allRecords.empty()) {
-        std::cout << "目前系統中無任何交易日誌紀錄。\n";
-        pause();
-        return;
-    }
-    
-    std::cout << std::left << std::setw(10) << "紀錄ID" << std::setw(10) << "借閱者" << std::setw(8) << "館藏ID" << std::setw(25) << "標題" << std::setw(12) << "借書日期" << std::setw(12) << "還書日期" << std::setw(8) << "費用" << "狀態\n";
-    std::cout << "--------------------------------------------------------------------------------------------------\n";
-    for (const auto& rec : allRecords) {
-        std::cout << std::left << std::setw(10) << rec.recordId
-                  << std::setw(10) << rec.username
-                  << std::setw(8) << rec.itemId
-                  << std::setw(25) << (rec.itemTitle.length() > 22 ? rec.itemTitle.substr(0, 20) + ".." : rec.itemTitle)
-                  << std::setw(12) << rec.borrowDate
-                  << std::setw(12) << rec.returnDate
-                  << "NT$ " << std::left << std::setw(5) << rec.rentalFee
-                  << rec.status << "\n";
-    }
-    std::cout << "--------------------------------------------------------------------------------------------------\n";
-    pause();
-}
-
-
-// Admin Action: Recycle Bin & Archive Management Center
-void LibrarySystem::adminRecycleBinMenu() {
-    while (true) {
-        std::vector<std::string> options = {
-            "檢視回收桶內容 (封存項目列表)",
-            "還原重新上架已封存項目",
-            "徹底清空回收桶 (硬刪除)",
-            "返回管理者主控台"
-        };
-        std::string title = "\n===============================================\n"
-                            "       【資源回收桶與封存管理中心】       \n"
-                            "===============================================\n"
-                            "請選擇操作項目:";
-        int selection = getMenuSelection(options, title);
-
-        if (selection == 0) {
-            clearScreen();
-            std::cout << "\n----------------------- 資源回收桶 (封存項目) -----------------------\n";
-            std::vector<std::shared_ptr<MediaItem>> archivedItems;
-            for (const auto& item : inventory) {
-                if (item->getStatus() == "ARCHIVED") {
-                    archivedItems.push_back(item);
-                }
-            }
-
-            if (archivedItems.empty()) {
-                std::cout << "資源回收桶目前是空的。\n";
-            } else {
-                std::cout << std::left << std::setw(8) << "ID" << std::setw(25) << "名稱" << std::setw(10) << "類別" << "詳細資料\n";
-                std::cout << "-------------------------------------------------------------------\n";
-                for (const auto& item : archivedItems) {
-                    std::string type = "未知";
-                    std::string details = "";
-                    
-                    if (std::dynamic_pointer_cast<Book>(item)) {
-                        type = "圖書 (Book)";
-                        auto book = std::dynamic_pointer_cast<Book>(item);
-                        details = "作者: " + book->getAuthor() + " | ISBN: " + book->getIsbn();
-                    } else if (std::dynamic_pointer_cast<Dvd>(item)) {
-                        type = "影音 (DVD)";
-                        auto dvd = std::dynamic_pointer_cast<Dvd>(item);
-                        details = "導演: " + dvd->getDirector() + " | 片長: " + std::to_string(dvd->getDuration()) + " 分鐘";
-                    } else if (std::dynamic_pointer_cast<Magazine>(item)) {
-                        type = "期刊 (Mag)";
-                        auto mag = std::dynamic_pointer_cast<Magazine>(item);
-                        details = "期號: " + std::to_string(mag->getIssueNum()) + " | 出版月份: " + std::to_string(mag->getMonth()) + "月";
-                    }
-
-                    std::cout << std::left << std::setw(8) << item->getId()
-                              << std::setw(25) << (item->getTitle().length() > 22 ? item->getTitle().substr(0, 20) + ".." : item->getTitle())
-                              << std::setw(10) << type
-                              << details << "\n";
-                }
-            }
-            std::cout << "-------------------------------------------------------------------\n";
-            pause();
-        } else if (selection == 1) {
-            std::vector<std::shared_ptr<MediaItem>> archivedItems;
-            for (const auto& item : inventory) {
-                if (item->getStatus() == "ARCHIVED") {
-                    archivedItems.push_back(item);
-                }
-            }
-
-            if (archivedItems.empty()) {
-                std::cout << "\n資源回收桶目前沒有任何可還原的項目。\n";
-                pause();
-                continue;
-            }
-
-            std::vector<std::string> restoreOpts;
-            for (const auto& item : archivedItems) {
-                std::string type = "未知";
-                if (std::dynamic_pointer_cast<Book>(item)) type = "圖書";
-                else if (std::dynamic_pointer_cast<Dvd>(item)) type = "影音";
-                else if (std::dynamic_pointer_cast<Magazine>(item)) type = "期刊";
-                restoreOpts.push_back("[" + type + "] ID: " + item->getId() + " - " + item->getTitle());
-            }
-            restoreOpts.push_back("返回回收桶主選單");
-
-            std::string restoreTitle = "\n===============================================\n"
-                                       "            【還原重新上架已封存項目】            \n"
-                                       "===============================================\n"
-                                       "請選擇欲還原重新上架的項目:";
-            int restoreSel = getMenuSelection(restoreOpts, restoreTitle);
-
-            if (restoreSel == static_cast<int>(archivedItems.size())) {
-                continue;
-            }
-
-            auto target = archivedItems[restoreSel];
-            target->setStatus("ACTIVE");
-            saveData();
-            std::cout << "\n🎉 館藏 《" << target->getTitle() << "》 (ID: " << target->getId() << ") 已成功重新上架！\n";
-            pause();
-        } else if (selection == 2) {
-            std::vector<std::shared_ptr<MediaItem>> archivedItems;
-            for (const auto& item : inventory) {
-                if (item->getStatus() == "ARCHIVED") {
-                    archivedItems.push_back(item);
-                }
-            }
-
-            if (archivedItems.empty()) {
-                std::cout << "\n資源回收桶目前已經是空的。\n";
-                pause();
-                continue;
-            }
-
-            std::cout << "\n⚠️ 警告：您確定要徹底清空資源回收桶嗎？這將永久刪除 " << archivedItems.size() << " 個項目，且無法復原！\n";
-            std::vector<std::string> confirmOpts = { "否 (取消)", "是 (確定清空)" };
-            int confirmSel = getMenuSelection(confirmOpts, "請確認此危險操作:");
-            
-            if (confirmSel == 1) {
-                inventory.erase(
-                    std::remove_if(inventory.begin(), inventory.end(),
-                        [](const std::shared_ptr<MediaItem>& item) {
-                            return item->getStatus() == "ARCHIVED";
-                        }
-                    ),
-                    inventory.end()
-                );
-                saveData();
-                std::cout << "\n🎉 資源回收桶已徹底清空，所有封存項目已被硬刪除！\n";
-                pause();
-            } else {
-                std::cout << "\n已取消清空操作。\n";
-                pause();
-            }
-        } else if (selection == 3) {
-            break;
-        }
-    }
-}
 

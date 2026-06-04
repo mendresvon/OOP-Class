@@ -13,12 +13,22 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 file(GLOB_RECURSE SOURCES 
     "main.cpp"
     "LibrarySystem.cpp"
+    "LibraryService.cpp"
+    "MenuRenderer.cpp"
+    "LibraryOperations.cpp"
+    "LibraryViews.cpp"
+    "LibraryMenus.cpp"
     "media/*.cpp"
     "accounts/*.cpp"
 )
 
 file(GLOB_RECURSE HEADERS 
     "LibrarySystem.h"
+    "LibraryService.h"
+    "MenuRenderer.h"
+    "LibraryOperations.h"
+    "LibraryViews.h"
+    "LibraryMenus.h"
     "media/*.h"
     "accounts/*.h"
 )
@@ -34,3 +44,17 @@ add_custom_target(copy_data_files ALL
     COMMENT "Copying data files to build directory..."
 )
 add_dependencies(SmartLibrarySystem copy_data_files)
+
+if (WIN32)
+    add_custom_target(doc_sync_gate
+        COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check-doc-sync.ps1"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Running Doc Sync Gate..."
+    )
+
+    add_custom_target(run_kv_tests
+        COMMAND powershell -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/run-kv-tests.ps1"
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        COMMENT "Running kv-v1 validation tests..."
+    )
+endif()

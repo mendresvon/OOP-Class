@@ -1,8 +1,10 @@
 #include "Admin.h"
 #include "../LibrarySystem.h"
+#include "../LibraryMenus.h"
 
-Admin::Admin(const std::string& username, const std::string& password, int adminLevel)
-    : Account(username, password), adminLevel(adminLevel) {}
+Admin::Admin(const std::string& username, const std::string& passwordOrHash,
+             int adminLevel, bool isHashedData, const std::string& salt)
+    : Account(username, passwordOrHash, isHashedData, salt), adminLevel(adminLevel) {}
 
 int Admin::getAdminLevel() const {
     return adminLevel;
@@ -17,5 +19,5 @@ std::string Admin::getRole() const {
 }
 
 void Admin::showMenu(LibrarySystem& sys) {
-    sys.runAdminMenu();
+    LibraryMenus::runAdminMenu(sys);
 }

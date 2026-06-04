@@ -1,9 +1,11 @@
 #include "User.h"
 #include "../LibrarySystem.h"
+#include "../LibraryMenus.h"
 #include <algorithm>
 
-User::User(const std::string& username, const std::string& password)
-    : Account(username, password) {}
+User::User(const std::string& username, const std::string& passwordOrHash,
+           bool isHashedData, const std::string& salt)
+    : Account(username, passwordOrHash, isHashedData, salt) {}
 
 const std::vector<std::string>& User::getBorrowedIds() const {
     return borrowedIds;
@@ -33,5 +35,5 @@ std::string User::getRole() const {
 }
 
 void User::showMenu(LibrarySystem& sys) {
-    sys.runUserMenu();
+    LibraryMenus::runUserMenu(sys);
 }

@@ -1,7 +1,7 @@
 # recycle-bin-persistence Specification
 
 ## Purpose
-TBD - created by archiving change interactive-menu-soft-delete. Update Purpose after archive.
+Define recycle-bin archive lifecycle and persistent cleanup behavior for archived media items.
 ## Requirements
 ### Requirement: Recycle Bin Management and Hard Purge
 The system SHALL support restoring archived media items back to `ACTIVE` status or performing a hard purge that permanently removes all archived (`ARCHIVED`) items from the single inventory vector and overwrites the text database.

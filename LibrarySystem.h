@@ -9,6 +9,9 @@
 #include "RentalRecord.h"
 
 class LibrarySystem {
+    friend class LibraryOperations;
+    friend class LibraryViews;
+    friend class LibraryMenus;
 private:
     std::vector<std::shared_ptr<MediaItem>> inventory;
     std::vector<std::shared_ptr<Account>> accounts;
@@ -37,28 +40,10 @@ public:
     void saveData();
     void run();
 
-    // Role menu loops (called by User/Admin polymorphism)
-    void runUserMenu();
-    void runAdminMenu();
-
     // Action Handlers
     bool processLogin(const std::string& username, const std::string& password);
     bool processRegister(const std::string& username, const std::string& password);
     void processLogout();
-
-    // User Operations
-    void showInventory() const;
-    void searchInventory() const;
-    void executeBorrow();
-    void executeReturn();
-    void showUserRentalHistory() const;
-
-    // Admin Operations
-    void adminAddMedia();
-    void adminRemoveMedia();
-    void adminViewAllAccounts() const;
-    void adminViewAllRecords() const;
-    void adminRecycleBinMenu();
 };
 
 #endif

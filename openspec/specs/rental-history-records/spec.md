@@ -1,7 +1,7 @@
 # rental-history-records Specification
 
 ## Purpose
-TBD - created by archiving change smart-media-rental-system. Update Purpose after archive.
+Define rental transaction recording and persistence behavior for borrow/return lifecycle.
 ## Requirements
 ### Requirement: Rent and Return Transaction Log
 The system SHALL create a `RentalRecord` whenever a media item is borrowed or returned. The record MUST log transaction details, timestamps, calculated fees, and status (BORROWED, RETURNED, OVERDUE).
@@ -16,4 +16,11 @@ The system SHALL persist all accounts, inventory items, and rental logs to physi
 #### Scenario: File reloading on launch
 - **WHEN** the application starts up
 - **THEN** it SHALL parse and load all state from the persistent files on the hard drive into memory, reconstructing the accurate status of all active rentals.
+
+### Requirement: kv-v1 Parser Tolerance
+The system SHALL continue loading valid records when malformed record lines are encountered, while emitting diagnostics.
+
+#### Scenario: Corrupted rental line
+- **WHEN** a rental record line has invalid key-value format or invalid numeric fields
+- **THEN** the parser SHALL emit diagnostics and skip or default that record field without crashing startup.
 
