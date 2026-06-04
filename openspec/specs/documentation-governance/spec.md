@@ -1,26 +1,37 @@
-# documentation-governance Specification
+## 新增需求
 
-## Purpose
-Ensure all architecture, data-format, and security changes are shipped with synchronized documentation updates.
+### 需求：文件同步更新為強制要求
+當行為、架構、安全策略或資料格式發生變更時，系統必須要求同步更新相關文件。
 
-## Requirements
-### Requirement: Documentation Coverage Matrix
-The project SHALL maintain a document coverage matrix mapping change categories to required documents.
+#### 情境：行為變更必須更新 README
+- **當** 變更影響使用者可見行為或 CLI 流程
+- **則** 必須在同一變更中更新 `README.md` 對應章節。
 
-#### Scenario: Data format update
-- **WHEN** persistence format behavior changes
-- **THEN** `docs/data-format-kv-v1.md`, `README.md`, and related OpenSpec specs SHALL be updated together.
+#### 情境：資料/安全變更必須更新 spec
+- **當** 變更涉及持久化格式、憑證處理或架構邊界
+- **則** 必須在同一變更中更新對應 OpenSpec capability 規格。
 
-### Requirement: Doc Sync Gate Enforcement
-The project SHALL provide an automated Doc Sync Gate check in local workflow and CI.
+### 需求：文件覆蓋矩陣
+專案必須維護「變更類型 -> 必更文件」的對照矩陣。
 
-#### Scenario: Code changed without docs
-- **WHEN** `.cpp`/`.h`/`data/` files change but required docs are unchanged
-- **THEN** Doc Sync Gate SHALL fail.
+#### 情境：結案前檢查必更文件
+- **當** 任務被標記為完成前
+- **則** 實作者必須透過覆蓋矩陣檢查並完成所有對應文件更新。
 
-### Requirement: Definition of Done Includes Docs
-Task completion SHALL require a documentation checklist pass.
+### 需求：專案層文件固定目錄
+專案層文件必須集中放置於固定的 `docs/` 目錄，並依文件主題維持穩定命名。
 
-#### Scenario: Marking implementation complete
-- **WHEN** a change is ready to close
-- **THEN** DoD checklist MUST confirm implementation, tests, and required docs are all updated.
+#### 情境：新增或更新專案層文件
+- **當** 變更新增或調整專案層文件（架構、資料格式、安全、測試、變更紀錄）
+- **則** 文件必須建立或更新於 `docs/` 下對應檔案，不得散落於非約定路徑。
+
+### 需求：Doc Sync Gate 強制執行
+專案必須在驗證流程中強制執行文件同步關卡。
+
+#### 情境：程式有改但文件未更新
+- **當** 原始碼檔案已修改但必更文件未同步更新
+- **則** Doc Sync Gate 必須判定失敗並阻擋結案，直到文件同步完成。
+
+#### 情境：安全敏感變更需補 spec delta
+- **當** 帳戶驗證或密碼儲存邏輯被修改
+- **則** 關卡必須要求 `account-management` 相關 spec 檔案同步更新後才可通過。

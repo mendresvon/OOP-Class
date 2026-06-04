@@ -1,37 +1,26 @@
-# stl-structured-persistence Specification
+## 新增需求
 
-## Purpose
-Define the `kv-v1` structured persistence format and strict parser behavior for `inventory.txt`, `accounts.txt`, and `rental_records.txt`.
+### 需求：STL 結構化持久化格式
+系統必須定義結構化文字持久化格式（`kv-v1`），每筆資料以鍵值對表示，且解析與序列化必須以 STL 容器建模。
 
-## Requirements
-### Requirement: kv-v1 Header and Required Keys
-The system SHALL reject files that do not start with `# format=kv-v1`. For every record line, required keys MUST be present according to record type.
+#### 情境：以 STL 映射解析庫存資料列
+- **當** 載入器讀取 `kv-v1` 的庫存資料列
+- **則** 必須先將該列解析為 `std::unordered_map<std::string, std::string>`，再映射為領域物件。
 
-#### Scenario: Missing format header
-- **WHEN** any persistence file does not contain `# format=kv-v1` at the first non-empty line
-- **THEN** startup SHALL fail with a visible error message.
+#### 情境：以固定鍵順序輸出序列化資料
+- **當** 儲存器寫入任一領域資料
+- **則** 必須透過預先定義的 `std::vector<std::string>` 鍵清單，以固定順序輸出欄位。
 
-#### Scenario: Missing required key in a record
-- **WHEN** a record is parsed but required keys are missing
-- **THEN** the parser SHALL emit diagnostic output and skip that record.
+### 需求：格式版本標記
+系統必須在每個持久化檔案中包含檔案層級的格式版本標記。
 
-### Requirement: Escaped kv-v1 Values
-The system SHALL support escaped value content to preserve separators and line breaks in fields.
+#### 情境：啟動時偵測格式版本
+- **當** 應用程式載入持久化檔案
+- **則** 必須偵測 `# format=kv-v1` 並選擇對應解析流程。
 
-#### Scenario: Record contains separators in title
-- **WHEN** a title contains `|`, `=`, or newline
-- **THEN** the value SHALL be written with escapes and restored during parsing.
+### 需求：嚴格的 kv-v1 輸入驗證
+系統僅能接受 `kv-v1` 持久化輸入，不得提供舊版 CSV 相容路徑。
 
-### Requirement: Parser Fault Tolerance
-The system SHALL continue loading valid records when malformed records are encountered.
-
-#### Scenario: Broken line mixed with valid lines
-- **WHEN** parser encounters malformed key-value syntax on one line
-- **THEN** it SHALL emit diagnostics, skip the line, and continue loading subsequent valid records.
-
-### Requirement: Multi-file Save Rollback
-The system SHALL attempt rollback of already written files when a later file write fails in the same save operation.
-
-#### Scenario: Mid-save failure while writing accounts or rental logs
-- **WHEN** inventory write succeeds but a later file write fails
-- **THEN** the repository SHALL restore previous file contents from backup snapshots.
+#### 情境：拒絕非 kv-v1 的庫存檔案
+- **當** 庫存檔案缺少 `kv-v1` 標記或仍使用舊版 CSV 結構
+- **則** 載入器必須回報格式錯誤，且不得將該檔案視為有效輸入。

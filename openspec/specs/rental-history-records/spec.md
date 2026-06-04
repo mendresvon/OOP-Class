@@ -1,26 +1,12 @@
-# rental-history-records Specification
+## 調整需求
 
-## Purpose
-Define rental transaction recording and persistence behavior for borrow/return lifecycle.
-## Requirements
-### Requirement: Rent and Return Transaction Log
-The system SHALL create a `RentalRecord` whenever a media item is borrowed or returned. The record MUST log transaction details, timestamps, calculated fees, and status (BORROWED, RETURNED, OVERDUE).
+### 需求：租借紀錄持久化
+系統必須以具版本的結構化文字格式持久化所有帳戶、庫存與租借日誌，並具備韌性解析行為。
 
-#### Scenario: User returns item and system computes fee
-- **WHEN** user returns a media item after 5 days
-- **THEN** the system SHALL calculate the rental fee using the media's polymorphic `getFee` implementation, update the record state to `RETURNED`, and set the return date.
+#### 情境：損毀的租借資料列不得造成啟動崩潰
+- **當** 某筆租借資料列存在無效數值或缺少必要欄位
+- **則** 載入器必須跳過該列、記錄錯誤，並繼續載入其餘資料。
 
-### Requirement: Rental Persistence
-The system SHALL persist all accounts, inventory items, and rental logs to physical text files (`accounts.txt`, `inventory.txt`, `rental_records.txt`) immediately upon state changes.
-
-#### Scenario: File reloading on launch
-- **WHEN** the application starts up
-- **THEN** it SHALL parse and load all state from the persistent files on the hard drive into memory, reconstructing the accurate status of all active rentals.
-
-### Requirement: kv-v1 Parser Tolerance
-The system SHALL continue loading valid records when malformed record lines are encountered, while emitting diagnostics.
-
-#### Scenario: Corrupted rental line
-- **WHEN** a rental record line has invalid key-value format or invalid numeric fields
-- **THEN** the parser SHALL emit diagnostics and skip or default that record field without crashing startup.
-
+#### 情境：租借紀錄原子儲存
+- **當** 借閱或歸還後需寫入租借紀錄
+- **則** 系統必須先寫入暫存檔，成功後再原子置換正式檔案。

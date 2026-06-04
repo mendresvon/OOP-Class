@@ -1,26 +1,19 @@
-# account-management Specification
+## 調整需求
 
-## Purpose
-Define registration, authentication, role dispatch, and credential persistence policy for user/admin accounts.
-## Requirements
-### Requirement: User Registration and Login
-The system SHALL support user registration and authentication. Users must supply a unique username and password to log in.
+### 需求：使用者註冊與登入
+系統必須以結構化鍵值欄位儲存帳戶資料，取代依賴固定索引的 CSV 欄位位置；帳密憑證必須以雜湊加鹽保存，不得使用明文。
 
-#### Scenario: Successful login
-- **WHEN** user inputs a valid registered username and password
-- **THEN** the system SHALL set `currentUser` to point to the active account and display the appropriate role-based menu.
+#### 情境：以欄位鍵名解析帳戶資料
+- **當** 載入器重建帳戶資料
+- **則** 必須依鍵名讀取必要屬性（例如 `username`、`role`），而非固定欄位索引。
 
-### Requirement: No Plaintext Password Persistence
-The system SHALL persist account credentials as `passwordHash` and `passwordSalt` only, and SHALL NOT persist plaintext password fields.
+#### 情境：密碼不得以明文持久化
+- **當** 使用者註冊或帳戶資料儲存時
+- **則** 系統必須儲存 `passwordHash` 與 `passwordSalt`，且不得落地原始密碼文字。
 
-#### Scenario: Saving account records
-- **WHEN** account data is written to `accounts.txt`
-- **THEN** each record SHALL contain `passwordHash` and `passwordSalt`, and SHALL NOT contain `password=`.
+### 需求：角色式介面存取控制
+系統在持久化格式升級後，必須維持既有角色權限行為一致。
 
-### Requirement: Role-Based Interface Access Control
-The system SHALL bifurcate user workflows based on their account role (User vs Admin). Users can borrow and return, whereas Admins can manage inventory, view system logs, and access the "Recycle Bin and Archive Management" center. All menu selections MUST be driven by keyboard arrow keys with reverse video highlighting for the active item.
-
-#### Scenario: Admin accesses admin menu and Recycle Bin submenu
-- **WHEN** an authenticated administrator logs in
-- **THEN** the system SHALL show the Admin dashboard driven by arrow key selections, featuring a sub-menu option for the Recycle Bin and Archive Management center.
-
+#### 情境：管理者以雜湊憑證登入
+- **當** 管理者輸入帳號與密碼
+- **則** 系統必須以雜湊比對驗證，僅在驗證成功時進入管理者選單。

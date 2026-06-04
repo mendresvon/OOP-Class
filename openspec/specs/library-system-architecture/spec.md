@@ -1,27 +1,19 @@
-# library-system-architecture Specification
+## 新增需求
 
-## Purpose
-Define the responsibility boundaries so `LibrarySystem` stays as an application coordinator and delegates UI, workflows, and views to dedicated modules.
+### 需求：LibrarySystem 職責分離
+系統必須重構 `LibrarySystem` 為分離職責的架構，避免將流程協調、業務邏輯與持久化實作集中於單一類別。
 
-## Requirements
-### Requirement: Coordinator-Only LibrarySystem
-`LibrarySystem` SHALL only coordinate startup, authentication flow orchestration, and repository save/load invocation.
+#### 情境：UI 與業務邏輯分離
+- **當** 觸發任一選單操作
+- **則** UI 顯示與輸入處理由 `MenuRenderer` 負責，業務操作由 `LibraryService` 執行。
 
-#### Scenario: User opens role menu
-- **WHEN** an authenticated user enters menu flow
-- **THEN** the logic SHALL be delegated to dedicated menu/view/operation components, not implemented inline in `LibrarySystem`.
+#### 情境：持久化與協調流程隔離
+- **當** 執行資料載入或儲存
+- **則** 持久化解析與檔案 I/O 必須由 `PersistenceRepository` 負責，而 `LibrarySystem` 僅做流程協調。
 
-### Requirement: Dedicated Workflow Modules
-The system SHALL split responsibilities across dedicated modules.
+### 需求：依賴方向約束
+系統必須強制採用單向依賴：UI -> Service -> Repository。
 
-#### Scenario: Borrow and return operations
-- **WHEN** borrow or return is triggered
-- **THEN** business logic SHALL execute in `LibraryOperations`.
-
-#### Scenario: Inventory and report display
-- **WHEN** inventory list or reports are requested
-- **THEN** rendering and query output SHALL execute in `LibraryViews`.
-
-#### Scenario: Role menu loops
-- **WHEN** account menu dispatch is invoked
-- **THEN** role menu loop SHALL execute in `LibraryMenus`.
+#### 情境：防止 UI 流程直接寫檔
+- **當** 使用者或管理者操作需要更新資料
+- **則** 必須透過定義好的介面呼叫 service 與 repository，不得在選單控制程式中直接寫檔。
