@@ -1,3 +1,0 @@
-# format=kv-v1
-username=admin|role=ADMIN|passwordHash=a984975c218b3e1a|passwordSalt=a1b2c3d4e5f6|adminLevel=1
-username=user1|role=USER|passwordHash=abc123|passwordSalt=salt123|borrowed=

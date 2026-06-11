@@ -1,2 +1,0 @@
-# format=kv-v1
-recordId=REC_10001|username=alex|itemId=B001|itemTitle=C++ Primer|borrowDate=2026-06-01|returnDate=Pending|rentalFee=0|status=BORROWED

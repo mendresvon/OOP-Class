@@ -1,2 +1,0 @@
-# format=csv-v0
-BOOK,B001,C++ Primer,0,Lippman,9780321714114,ACTIVE
