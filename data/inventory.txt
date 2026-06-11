@@ -1,0 +1,7 @@
+# format=kv-v1
+type=BOOK|id=B001|title=C++ Primer Plus|borrowed=1|author=Stephen Prata|isbn=978-0321776402|status=ARCHIVED
+type=BOOK|id=B002|title=Effective Modern C++|borrowed=0|author=Scott Meyers|isbn=978-1491903995|status=ACTIVE
+type=DVD|id=D001|title=Inception|borrowed=0|director=Christopher Nolan|duration=148|status=ACTIVE
+type=DVD|id=D002|title=Interstellar|borrowed=0|director=Christopher Nolan|duration=169|status=ACTIVE
+type=MAGAZINE|id=M001|title=Scientific American|borrowed=0|issue=2026|month=5|status=ACTIVE
+type=MAGAZINE|id=M002|title=Time Magazine|borrowed=1|issue=2026|month=6|status=ACTIVE

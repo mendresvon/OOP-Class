@@ -1,0 +1,5 @@
+# format=kv-v1
+recordId=REC_10001|username=alex|itemId=B001|itemTitle=C++ Primer Plus|borrowDate=2026-05-20|returnDate=Pending|rentalFee=0.0|status=BORROWED
+recordId=REC_10002|username=alex|itemId=M002|itemTitle=Time Magazine|borrowDate=2026-05-22|returnDate=Pending|rentalFee=0.0|status=BORROWED
+recordId=REC_10003|username=bob|itemId=D001|itemTitle=Inception|borrowDate=2026-05-25|returnDate=2026-05-27|rentalFee=40.0|status=RETURNED
+recordId=REC_10004|username=eric|itemId=B002|itemTitle=Effective Modern C++|borrowDate=2026-05-28|returnDate=2026-05-28|rentalFee=10.0|status=RETURNED

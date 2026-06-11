@@ -1,0 +1,4 @@
+# format=kv-v1
+type=BOOK|id=B001|title=C\|\=\n Primer|borrowed=0|author=Li\|ppman|isbn=9780321714114|status=ACTIVE
+broken line without key value pairs
+type=DVD|id=D001|title=Inception|borrowed=0|director=Nolan|duration=bad-int|status=ACTIVE
