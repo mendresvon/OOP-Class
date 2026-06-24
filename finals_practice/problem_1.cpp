@@ -18,4 +18,5 @@ int main(){
     }
 
     cout << (is_prime ? "Prime" : "Not a Prime");
+    return 0;
 }
