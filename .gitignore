@@ -33,3 +33,7 @@ map
 build/
 bin/
 
+# Finals practice executables
+finals_practice/problem_1
+finals_practice/problem_2
+finals_practice/problem_3
