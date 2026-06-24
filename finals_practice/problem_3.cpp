@@ -2,13 +2,13 @@
 
 using namespace std;
 int main(){
-    float input;
+    double n;
     cout << "Enter a floating point number: ";
-    cin >> input;
+    cin >> n;
 
-    int integer_part = static_cast<int>(input);
-    float decimal_part = input - integer_part;
-    float sum = integer_part + decimal_part;
+    int integer_part = static_cast<int>(n);
+    double decimal_part = n - integer_part;
+    double sum = integer_part + decimal_part;
 
     cout << "Integer Part: " << integer_part << endl;
     cout << "Decimal Part: " << decimal_part << endl;

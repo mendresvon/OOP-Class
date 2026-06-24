@@ -2,26 +2,22 @@
 
 using namespace std;
 int main(){
-    int num1, num2;
+    int n1, n2;
+    int count=0;
 
-    cout << "Enter 1st number: ";
-    cin >> num1;
-    cout << "Enter 2nd number: ";
-    cin >> num2;
+    cout << "Enter two numbers: ";
+    cin >> n1 >> n2;
 
-    if (num1 > num2){
-        int temp = num1;
-        num1 = num2;
-        num2 = temp;
+    if (n1 > n2){
+        int temp = n1;
+        n1 = n2;
+        n2 = temp;
     }
 
-    int count = 0;
-    for (int i=1; i*i <= num2; i++){
-        if (i*i >= num1){
-            count++;
-        }
+    for (int i=1; i*i <= n2; i++){
+        if (i*i >= n1 && i*i <= n2) count++;
     }
 
-    cout << count << endl;
+    cout << "Result: " << count << endl;
     return 0;
 }
