@@ -3,7 +3,7 @@ using namespace std;
 
 int main(){
     int n;
-    cout << "Enter valid integer (-127 ~ 128): ";
+    cout << "Enter valid integer (-128 ~ 127): ";
     cin >> n;
     if (n < -128 || n > 127) {
         cout << "Not valid number.\n";
